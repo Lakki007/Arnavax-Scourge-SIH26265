@@ -1,0 +1,57 @@
+diff --git a/crates/examples/Cargo.toml b/crates/examples/Cargo.toml
+index 27d428c..26d6f7f 100644
+--- a/crates/examples/Cargo.toml
++++ b/crates/examples/Cargo.toml
+@@ -8,7 +8,11 @@ version = "0.0.0"
+ workspace = true
+ 
+ [dependencies]
+-tlsn = { workspace = true }
++axum = { workspace = true }
++futures-rustls = { workspace = true }
++sha2 = { workspace = true }
++tower-service = { version = "0.3" }
++tlsn = { workspace = true, features = ["mozilla-certs"] }
+ tlsn-formats = { workspace = true }
+ tls-server-fixture = { workspace = true }
+ tlsn-server-fixture = { workspace = true }
+@@ -58,3 +62,39 @@ path = "attestation/present.rs"
+ [[example]]
+ name = "attestation_verify"
+ path = "attestation/verify.rs"
++
++[[example]]
++name = "fdr_proof"
++path = "fdr/fdr_proof.rs"
++
++[[example]]
++name = "real_bank_probe"
++path = "fdr/real_bank_probe.rs"
++
++[[example]]
++name = "bsp_prove"
++path = "bsp/prove.rs"
++
++[[example]]
++name = "bsp_verifierd"
++path = "bsp/verifierd.rs"
++
++[[example]]
++name = "bsp_challenge"
++path = "bsp/challenge.rs"
++
++[[example]]
++name = "bsp_mockbank"
++path = "bsp/mockbank.rs"
++
++[[example]]
++name = "scourge_prove"
++path = "scourge/prove.rs"
++
++[[example]]
++name = "scourge_verifierd"
++path = "scourge/verifierd.rs"
++
++[[example]]
++name = "scourge_mockbank"
++path = "scourge/mockbank.rs"

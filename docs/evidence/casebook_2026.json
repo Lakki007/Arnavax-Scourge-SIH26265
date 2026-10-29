@@ -1,0 +1,322 @@
+[
+ {
+  "i": 0,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-7685370089"
+ },
+ {
+  "i": 1,
+  "kind": "hide_lien",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-4507963309"
+ },
+ {
+  "i": 2,
+  "kind": "fake_bank",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "rejected",
+  "fd": "FD-3738975628"
+ },
+ {
+  "i": 3,
+  "kind": "lien_loan",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-2327139357"
+ },
+ {
+  "i": 4,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-5795107404"
+ },
+ {
+  "i": 5,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-9698924284"
+ },
+ {
+  "i": 6,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-4798065994"
+ },
+ {
+  "i": 7,
+  "kind": "fake_bank",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "rejected",
+  "fd": "FD-9582277738"
+ },
+ {
+  "i": 8,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-9421018738"
+ },
+ {
+  "i": 9,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-8843355507"
+ },
+ {
+  "i": 10,
+  "kind": "forged",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-7507619930"
+ },
+ {
+  "i": 11,
+  "kind": "reduced",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-9174455274"
+ },
+ {
+  "i": 12,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-1395861254"
+ },
+ {
+  "i": 13,
+  "kind": "maturity_changed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-8024025962"
+ },
+ {
+  "i": 14,
+  "kind": "forged",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-3525159540"
+ },
+ {
+  "i": 15,
+  "kind": "maturity_changed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-7811943504"
+ },
+ {
+  "i": 16,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-1315393763"
+ },
+ {
+  "i": 17,
+  "kind": "hide_lien",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-7228305526"
+ },
+ {
+  "i": 18,
+  "kind": "reduced",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-4053217866"
+ },
+ {
+  "i": 19,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-5501930879"
+ },
+ {
+  "i": 20,
+  "kind": "hide_lien",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-6093853641"
+ },
+ {
+  "i": 21,
+  "kind": "lien_loan",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-6045276412"
+ },
+ {
+  "i": 22,
+  "kind": "reduced",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-7365368230"
+ },
+ {
+  "i": 23,
+  "kind": "lien_loan",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-9068614754"
+ },
+ {
+  "i": 24,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-1930042724"
+ },
+ {
+  "i": 25,
+  "kind": "lien_loan",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-1569590672"
+ },
+ {
+  "i": 26,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-4445925714"
+ },
+ {
+  "i": 27,
+  "kind": "forged",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-1270063605"
+ },
+ {
+  "i": 28,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-5393655803"
+ },
+ {
+  "i": 29,
+  "kind": "fake_bank",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "rejected",
+  "fd": "FD-3610419498"
+ },
+ {
+  "i": 30,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-6965912761"
+ },
+ {
+  "i": 31,
+  "kind": "hide_lien",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-5820307225"
+ },
+ {
+  "i": 32,
+  "kind": "lien_loan",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-1483603032"
+ },
+ {
+  "i": 33,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-3483037223"
+ },
+ {
+  "i": 34,
+  "kind": "closed",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-3331853998"
+ },
+ {
+  "i": 35,
+  "kind": "honest_unreadable",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "insufficient_evidence",
+  "fd": "FD-7351583601"
+ },
+ {
+  "i": 36,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-2363643283"
+ },
+ {
+  "i": 37,
+  "kind": "reduced",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "discrepancy",
+  "fd": "FD-8855719729"
+ },
+ {
+  "i": 38,
+  "kind": "honest",
+  "bad": false,
+  "baseline": "approved",
+  "scourge": "verified",
+  "fd": "FD-7788538117"
+ },
+ {
+  "i": 39,
+  "kind": "fake_bank",
+  "bad": true,
+  "baseline": "approved",
+  "scourge": "rejected",
+  "fd": "FD-9751022855"
+ }
+]

@@ -1,0 +1,88 @@
+{% macro status(st) -%}
+<span class="st st-{{ st[0] }}">{{ st[1] }}</span>
+{%- endmacro %}
+
+{% macro decision(d) -%}
+<span class="st st-{{ d }}">{{ LABEL[d] }}</span>
+{%- endmacro %}
+
+{# ---------------------------------------------------------------------------------------------
+   The receipt: one bank response, rendered byte-faithfully from the verifier's ranges.
+   AICTE view: disclosed text + solid bars sized by the hidden byte count.
+   Institution view (only for the owning institution): the same bytes from its local copy,
+   with everything AICTE never received marked. Hidden text is NOT in the HTML for anyone else.
+--------------------------------------------------------------------------------------------- #}
+{% macro receipt(rc, host, title='The bank response', id='rc', kind='recv') -%}
+{% if rc %}
+<figure class="receipt object" data-view="aicte" id="{{ id }}">
+  <div class="receipt-head">
+    <div>
+      <p class="receipt-title">{{ title }}</p>
+      <p class="receipt-meta">From <span class="mono">{{ host }}</span>. AICTE received {{ rc.shown }} of {{ rc.total }} bytes; {{ rc.hidden }} stayed with the institution.</p>
+    </div>
+    {% if rc.has_private %}
+    <div class="seg" role="group" aria-label="Choose whose view to show">
+      <button type="button" class="seg-btn" aria-pressed="true" data-view-set="aicte">What AICTE received</button>
+      <button type="button" class="seg-btn" aria-pressed="false" data-view-set="inst">What your browser received</button>
+    </div>
+    {% endif %}
+  </div>
+  <pre class="receipt-doc" tabindex="0" aria-label="Response bytes; hidden parts are marked with their size">{% for sg in rc.segs %}{% if sg.shown %}<mark class="rv {{ 'rv-req' if kind == 'sent' else ('rv-status' if sg.label == 'status line' else ('rv-head' if sg.label and 'header' in sg.label else 'rv-body')) }}" title="Disclosed to AICTE: {{ sg.label or 'bytes' }}, {{ sg.n }} bytes">{% if sg.parts %}{% for pt in sg.parts %}{% if pt.field %}<span class="fv" data-field="{{ pt.field }}">{{ pt.text }}</span>{% else %}{{ pt.text }}{% endif %}{% endfor %}{% else %}{{ sg.text|replace('\r\n', '\n') }}{% endif %}</mark>{% else %}<span class="hid"><span class="bar" style="--w:{{ [[sg.n, 6]|max, 56]|min }}" title="{{ sg.n }} bytes hidden from AICTE">{% if sg.n >= 10 %}{{ sg.n }} bytes hidden{% endif %}</span>{% if sg.text is not none %}<span class="priv">{{ sg.text|replace('\r\n', '\n') }}</span>{% endif %}</span>{% endif %}{% endfor %}</pre>
+  <figcaption class="receipt-legend">
+    {% if kind == 'sent' %}<span><i class="k k-req"></i>method and approved path, disclosed</span>
+    {% else %}<span><i class="k k-body"></i>deposit record, disclosed</span>
+    <span><i class="k k-head"></i>status, content type, date, disclosed</span>{% endif %}
+    <span><i class="k k-hid"></i>{{ 'never left your machine' if rc.has_private else ('hidden from AICTE: query string, cookies, headers; only the size is known' if kind == 'sent' else 'hidden from AICTE: only its size is known') }}</span>
+  </figcaption>
+</figure>
+{% endif %}
+{%- endmacro %}
+
+{# The three parties of one proof. Rows are appended from REAL prover events by app.js (#stages). #}
+{% macro lanes_head() -%}
+<div class="lanes-head" aria-hidden="true">
+  <div class="lane-name"><span class="lane-ic ic-bank"></span>Bank's server<small>sees a normal login session</small></div>
+  <div class="lane-name"><span class="lane-ic ic-inst"></span>Institution<small>runs the prover</small></div>
+  <div class="lane-name"><span class="lane-ic ic-aicte"></span>AICTE verifier<small>holds half the TLS keys</small></div>
+</div>
+{%- endmacro %}
+
+{# A static explanation of the same flow (no data; used on the landing and how-it-works pages). #}
+{% macro lanes_static() -%}
+<figure class="lanes object" aria-labelledby="lanes-cap">
+  {{ lanes_head() }}
+  <ol class="lanes-body static">
+    <li class="row arrow i-v back"><span class="msg">Challenge from AICTE, single use</span></li>
+    <li class="row arrow b-i dual"><span class="msg">One TLS session. Its keys are split between the institution and AICTE's verifier, so neither alone can forge it</span></li>
+    <li class="row arrow b-i"><span class="msg">The bank sends the deposit page, encrypted</span></li>
+    <li class="row dot i"><span class="msg">The institution chooses what to disclose: this deposit's record only</span></li>
+    <li class="row arrow i-v"><span class="msg">Selective-disclosure proof</span></li>
+    <li class="row dot v"><span class="msg">The verifier checks the bank's certificate, address and record, then hands facts to the register</span></li>
+  </ol>
+  <figcaption id="lanes-cap" class="lanes-cap">The bank never talks to AICTE. AICTE never sees the password, cookies, PAN or other accounts.</figcaption>
+</figure>
+{%- endmacro %}
+
+{# Claim (register) vs witness (bank's server) #}
+{% macro cvw(rows, when_text, has_evidence) -%}
+<section class="cvw object" aria-labelledby="cvw-h">
+  <h2 id="cvw-h" class="skip">The register's claim compared with the bank's server</h2>
+  <div class="cvw-head">
+    <div><span class="cvw-k">The paper says</span><span class="cvw-sub">Amounts and dates from the register; status, holder and lien are what AICTE requires</span></div>
+    <div></div>
+    <div><span class="cvw-k">The bank's server says</span><span class="cvw-sub">{{ when_text if has_evidence else 'No witness yet' }}</span></div>
+  </div>
+  {% if has_evidence %}<p class="cvw-hint">Point at or tab to a row to see the exact bytes in the bank's response that it came from.</p>{% endif %}
+  {% for r in rows %}
+  <div class="cvw-row res-row-{{ r.result or 'none' }}"{% if r.witness %} data-field="{{ r.key }}" tabindex="0"{% endif %}>
+    <div class="cvw-claim"><span class="cvw-label">{{ r.label }}</span><span class="cvw-val">{{ r.claim }}</span></div>
+    <div class="cvw-mark" aria-label="{{ {'match':'matches','mismatch':'contradicts','not_exposed':'not shown by the bank','unrecognised':'not recognised','ambiguous':'ambiguous','unparseable':'unreadable','not_checked':'shown, not checked'}.get(r.result, 'no evidence') }}">{% if r.result == 'match' %}✓{% elif r.result == 'mismatch' %}✕{% elif r.result in ('not_exposed','unrecognised','ambiguous','unparseable') %}?{% elif r.result == 'not_checked' %}·{% else %}–{% endif %}</div>
+    <div class="cvw-wit"><span class="cvw-val mono">{% if r.witness %}{{ inr(r.witness) if r.money else r.witness }}{% elif r.result == 'not_exposed' %}<span class="muted">not shown by the bank</span>{% else %}<span class="muted">—</span>{% endif %}</span>{% if r.result == 'mismatch' and r.note %}<span class="cvw-note">{{ r.note }}</span>{% endif %}</div>
+  </div>
+  {% endfor %}
+</section>
+{%- endmacro %}
+
+{% macro vouch(r) -%}
+{% if r.status[0] == 'released' %}<span class="vouch">Released</span>{% elif r.status[0] == 'stale' %}<span class="vouch vouch-paper">Paper; bank confirmation expired</span>{% elif r.evidence %}{% set d = r.evidence[0].decision %}{% if d == 'verified' %}<span class="vouch vouch-bank">Bank's server</span>{% elif d == 'discrepancy' %}<span class="vouch vouch-bad">Bank contradicts</span>{% else %}<span class="vouch vouch-warn">Paper; last proof failed</span>{% endif %}<span class="muted small"> {{ ago(r.evidence[0].received_at) }}</span>{% else %}<span class="vouch vouch-paper">Paper only</span>{% endif %}
+{%- endmacro %}

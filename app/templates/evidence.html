@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "_m.html" import receipt, cvw as cvw_view %}
+{% block title %}Proof #{{ e.id }}{% endblock %}
+{% block main %}
+{% set f = b.f %}
+{% set st = facts.get('stages', {}) %}
+<div class="page-head">
+  <div>
+    <p class="crumb"><a href="/fdrs/{{ f.id }}">{{ f.id }}</a> <span aria-hidden="true">/</span> proof #{{ e.id }}</p>
+    <h1>{% if e.decision == 'verified' %}The bank's server confirms it.{% elif e.decision == 'discrepancy' %}The bank's server contradicts the paper.{% elif e.decision == 'insufficient_evidence' %}A genuine response, but not enough to decide.{% else %}Not accepted as the bank's word.{% endif %}<span class="serif">{{ f.fd_number }}, {{ when(e.received_at) }}</span></h1>
+    {% if reason %}<p class="lede">{{ reason }}</p>{% endif %}
+  </div>
+  <div class="head-status"><span class="stamp stamp-{{ e.decision }} fresh">{{ LABEL[e.decision] }}</span></div>
+</div>
+{% if facts.get('verifier_trust') == 'test_ca' %}<p class="syn-line"><span class="badge-syn">Synthetic</span> Mock bank signed by a test certificate authority. The cryptographic proof is real; the bank is not.</p>{% endif %}
+
+{% if match %}{{ cvw_view(cvw, 'Authenticated from the bank\'s TLS session', true) }}{% endif %}
+
+<div class="sec">
+  <div class="sec-head"><h2>Exactly what crossed to AICTE</h2><div class="actions"><a class="btn btn-ghost btn-sm" href="/evidence/{{ e.id }}/export">Export JSON</a></div></div>
+  {% if rq %}{{ receipt(rq, f.bank_host, 'The institution\'s request to the bank', 'rq', 'sent') }}{% endif %}
+  {% if rc %}<div style="height:18px"></div>{{ receipt(rc, f.bank_host, 'The bank\'s response') }}{% else %}<p class="muted">The verifier did not receive a transcript for this proof ({{ st.get('tls_proof', 'no TLS session') }}).</p>{% endif %}
+</div>
+
+<div class="sec grid-2">
+  <div>
+    <h2>How the verifier decided</h2>
+    <ol class="stages">
+      {% set tls = st.get('tls_proof', '') %}
+      <li class="{{ 'ok' if tls == 'verified' else 'bad' }}"><span><b>Challenge</b><div class="muted small">{{ ch.id }} issued {{ when(ch.issued_at) }}, consumed {{ when(ch.consumed_at) }}. Single use.</div></span></li>
+      <li class="{{ 'ok' if tls == 'verified' else 'bad' }}"><span><b>TLS proof</b><div class="muted small">{{ 'Transcript verified; the verifier held half of the session keys' if tls == 'verified' else tls }}</div></span></li>
+      {% if st.server_identity %}<li class="{{ 'ok' if st.server_identity.allow_listed else 'bad' }}"><span><b>Bank identity</b><div class="muted small"><span class="mono">{{ st.server_identity.host }}</span>: certificate chains to the verifier's roots ({{ st.server_identity.trust }}); {{ 'on' if st.server_identity.allow_listed else 'NOT on' }} AICTE's approved list</div></span></li>{% endif %}
+      {% if st.request_policy %}<li class="{{ 'ok' if st.request_policy.matches_schema_endpoint else 'bad' }}"><span><b>Request</b><div class="muted small">Only <span class="mono">{{ st.request_policy.disclosed_request_prefix }}</span> disclosed</div></span></li>{% endif %}
+      {% if st.http %}<li class="{{ 'ok' if st.http.class == 'usable' else 'warn' }}"><span><b>Bank response</b><div class="muted small">HTTP {{ st.http.status }}, {{ st.http.content_type or 'no content type' }} ({{ st.http.class.replace('_',' ') }})</div></span></li>{% endif %}
+      {% if st.schema %}<li class="{{ 'ok' if st.schema.ok and st.schema.matching_fd_records == 1 else 'warn' }}"><span><b>Deposit record</b><div class="muted small">{% if st.schema.ok %}{{ st.schema.matching_fd_records }} matching record of {{ st.schema.fd_records_disclosed }} disclosed; {{ st.schema.object_context }}{% else %}{{ st.schema.error }}{% endif %}</div></span></li>{% endif %}
+      {% if match %}<li class="{{ 'ok' if e.decision == 'verified' else ('bad' if e.decision == 'discrepancy' else 'warn') }}"><span><b>Register match</b><div class="muted small">Done by the AICTE app, separately from the verifier</div></span></li>{% endif %}
+    </ol>
+  </div>
+  <div>
+    <h2>Cost and limits</h2>
+    <dl class="kv">
+      <dt>Elapsed</dt><dd>{{ metrics.get('elapsed_s', '—') }} s</dd>
+      <dt>Prover → verifier</dt><dd>{{ ((metrics.get('mpc_bytes_prover_to_verifier', 0) or 0)/1e6)|round(1) }} MB</dd>
+      {% if metrics.get('request_bytes_actual') is not none %}<dt>Request</dt><dd>{{ metrics.request_bytes_actual }} bytes, budget {{ metrics.max_sent_committed }}</dd>
+      <dt>Response</dt><dd>{{ metrics.response_bytes_actual }} bytes, budget {{ metrics.max_recv_committed }}</dd>{% endif %}
+    </dl>
+    <p class="muted small">Measured here with the verifier on the same machine; network timing is not measured.</p>
+    <h3 style="margin-top:24px">This proof does not show</h3>
+    <ul class="limits">
+      <li>Anything after {{ when(e.received_at) }}.</li>
+      <li>Liens or loans the bank page does not display: unknown, not clear.</li>
+      <li>Whether the bank's own ledger is correct.</li>
+      {% if st.schema and st.schema.disclosure == 'object' %}<li>Where the record sat in the response (record-only disclosure).</li>{% endif %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

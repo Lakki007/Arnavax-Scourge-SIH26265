@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Mock bank{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <span class="badge-syn">Synthetic</span>
+    <h1 style="margin-top:12px">Mock bank console<span class="serif">Change what the bank's server will say.</span></h1>
+    <p class="lede">This plays the bank's side for the demo. Change a deposit here, then request and run a proof. The outcome changes because the bank's response changes, not because the portal knows. The verifier never reads this console.</p>
+  </div>
+</div>
+{% if rows %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Deposit</th><th>Customer at the bank</th><th>Register</th><th>Bank behaviour</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr id="{{ r.d.fd_number }}">
+    <td class="mono nowrap">{{ r.d.fd_number }}<div class="muted small">{{ inr(r.d.principal) }}, matures {{ r.d.maturity }}</div></td>
+    <td class="small">{{ r.cust_name }}<div class="muted">{{ r.cust }}</div></td>
+    <td class="small" style="white-space:nowrap">{% if r.reg %}<a href="/fdrs/{{ r.reg.id }}">{{ r.reg.id }}</a>{% else %}<span class="muted">not registered</span>{% endif %}</td>
+    <td>
+      <form method="post" action="/mockbank/behaviour" class="actions" style="flex-wrap:nowrap">
+        <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="fd_number" value="{{ r.d.fd_number }}">
+        <label class="skip" for="b-{{ r.d.fd_number }}">Behaviour for {{ r.d.fd_number }}</label>
+        <select id="b-{{ r.d.fd_number }}" name="behaviour" style="min-width:250px">
+          {% for k, lab in BEHAVIOURS.items() %}<option value="{{ k }}" {% if r.d.behaviour == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-quiet btn-sm">Save</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<div class="empty">The mock bank has no deposits. Reset the demo to restore them.</div>{% endif %}
+
+{% if missing %}
+<section style="margin-top:32px" aria-labelledby="miss-h">
+  <h2 id="miss-h">Registered at AICTE but not at the bank</h2>
+  <p class="muted small">A proof for these ends as insufficient evidence: the bank answers "no such deposit".{% if s.role == 'officer' %} You can open them at the mock bank.{% endif %}</p>
+  <div class="table-wrap"><table><tbody>
+  {% for m in missing %}<tr><td class="mono">{{ m.fd_number }}</td><td class="small">{{ m.inst }}</td><td style="text-align:right">{% if s.role == 'officer' %}<form method="post" action="/mockbank/open"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="fd_number" value="{{ m.fd_number }}"><label class="small muted" for="bp-{{ m.fd_number }}">Bank holds ₹<span class="skip"> for {{ m.fd_number }}</span></label> <input class="bp-in" id="bp-{{ m.fd_number }}" name="bank_principal" inputmode="decimal" value="{{ m.principal }}" title="Principal the bank holds. Change it to make the bank disagree with the register."> <button class="btn btn-quiet btn-sm">Open at mock bank</button></form>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+<section class="panel" style="margin-top:32px">
+  <h2>Failed dependencies</h2>
+  <p class="muted small" style="margin:0">To see what happens when the bank or AICTE's verifier is down, stop it from <a href="/system">System</a>, run a proof, then start it again.</p>
+</section>
+{% endblock %}

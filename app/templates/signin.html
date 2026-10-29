@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Choose a demo role{% endblock %}
+{% block main %}
+<div style="max-width:560px;margin:6vh auto 0">
+  <h1>Choose a demo role<span class="serif">Each role sees only what it should.</span></h1>
+  <p class="lede">Demo sign-in has no passwords. A real deployment would use AICTE's single sign-on for officers and the institution's portal login.</p>
+  <form method="post" action="/signin" style="margin-top:32px">
+    <input type="hidden" name="next" value="{{ next }}">
+    <fieldset class="choice">
+      <legend>Sign in as</legend>
+      <label><input type="radio" name="role" value="officer" checked><span><b>AICTE officer, Regulation Bureau</b><span class="d">Registers FDRs, requests bank proofs, accepts or escalates, releases deposits.</span></span></label>
+      {% for i in institutions %}
+      <label><input type="radio" name="role" value="institution:{{ i.id }}"><span><b>{{ i.name }}, {{ i.city }}</b><span class="d">Institution {{ i.id }} (sample). Answers AICTE's proof requests from its own bank session.</span></span></label>
+      {% endfor %}
+    </fieldset>
+    {% if access_required %}<div class="field" style="margin-top:20px"><label for="access_code">Judges' access code</label><input id="access_code" name="access_code" type="password" autocomplete="off" required></div>{% endif %}
+    <button class="btn btn-solid">Continue</button>
+  </form>
+</div>
+{% endblock %}

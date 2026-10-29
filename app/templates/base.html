@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Scourge{% endblock %} · Scourge</title>
+<meta name="description" content="Bank-sourced proof for AICTE security deposits (demo)">
+<link rel="preload" href="/static/fonts/geist-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d6d6dc'/%3E%3Ccircle cx='12' cy='11' r='4' fill='%23fff'/%3E%3C/svg%3E">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="frame {% block frame_class %}{% endblock %}">
+  <header class="top">
+    <a class="chip-brand" href="/" aria-label="Scourge home"><span class="seal" aria-hidden="true"></span>Scourge <small>for AICTE security deposits</small></a>
+    <nav class="nav" aria-label="Main">
+      {% set links = [] %}
+      {% if s and s.role == 'officer' %}
+        {% set links = [('/register','Register'),('/baseline','Baseline'),('/mockbank','Mock bank'),('/audit','Audit log'),('/system','System'),('/how','How it works')] %}
+      {% elif s %}
+        {% set links = [('/portal','My deposits'),('/mockbank','Mock bank'),('/system','System'),('/how','How it works')] %}
+      {% else %}
+        {% set links = [] %}
+      {% endif %}
+      {% for href, label in links %}<a href="{{ href }}" {% if path == href or (href != '/' and path.startswith(href ~ '/')) %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </nav>
+    <div class="top-right">
+      {% if s %}
+        <div class="who">{% if s.role == 'officer' %}<b>AICTE officer</b>Regulation Bureau{% else %}<b>Institution</b>{{ s.inst }}{% endif %}</div>
+        <form method="post" action="/signout"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost btn-sm">Sign out</button></form>
+      {% else %}
+        <a class="btn btn-ghost btn-sm" href="/how">How it works</a>
+        <a class="btn btn-solid btn-sm" href="/signin">Start the demo</a>
+      {% endif %}
+    </div>
+  </header>
+  <main id="main">{% block main %}{% endblock %}</main>
+  <div class="demo-bar" role="note" aria-label="Demo mode">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="long">Demo mode: synthetic bank, test certificate authority. The proofs are real; the bank is not.</span><span class="short">Demo: synthetic bank, real proofs</span>
+    {% if s and s.role == 'officer' %}
+    <button class="btn btn-solid btn-sm" type="button" data-open="reset-dlg">Reset demo</button>
+    {% else %}<a class="btn btn-quiet btn-sm" href="/how#real">What is real</a>{% endif %}
+  </div>
+</div>
+{% if s and s.role == 'officer' %}
+<dialog id="reset-dlg" aria-labelledby="reset-title">
+  <h2 id="reset-title">Reset the demo?</h2>
+  <p class="muted small">This deletes every challenge, proof, decision and audit entry, reloads the sample register (4 FDRs) and resets the mock bank. Use it between judging sessions.</p>
+  <form method="post" action="/system/reset" class="actions">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <button class="btn btn-solid">Reset demo</button>
+    <button class="btn btn-ghost" type="button" data-close>Keep current data</button>
+  </form>
+</dialog>
+{% endif %}
+<script src="/static/js/app.js" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "_m.html" import status, cvw as cvw_view %}
+{% block title %}Baseline comparison{% if up %}
+<section class="sec" aria-labelledby="sk-h">
+  <div class="sec-head"><h2 id="sk-h">Scourge, for the same deposit: {{ status(b.status) }}</h2>
+  <div class="actions">{% if latest %}<a class="btn btn-quiet btn-sm" href="/evidence/{{ latest.id }}">Open the proof</a>{% else %}<a class="btn btn-solid btn-sm" href="/fdrs/{{ b.f.id }}">Request a bank proof</a>{% endif %}</div></div>
+  <p class="muted small">{% if latest %}Not the document: what <span class="mono">{{ b.f.bank_host }}</span> itself said in a proven TLS session, {{ ago(latest.received_at) }}.{% else %}No bank-session proof yet. The document is not evidence, so nothing on the right is filled in.{% endif %}</p>
+  {{ cvw_view(cvw, ('Proof of ' ~ when(latest.received_at)) if latest else '', latest is not none and latest.decision in ('verified','discrepancy','insufficient_evidence')) }}
+</section>
+{% endif %}
+{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <span class="badge-syn">Deliberately weak baseline</span>
+    <h1 style="margin-top:12px">Upload and approve<span class="serif">How most portals confirm an FDR today.</span></h1>
+    <p class="lede">Upload any document that claims to show an FDR, such as a screenshot edited in the browser's developer tools. The baseline can only look at it. Compare that with what the bank's server says for the same deposit.</p>
+  </div>
+</div>
+<div class="grid-2">
+  <form method="post" enctype="multipart/form-data" class="panel">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    {% if error %}<div class="note note-bad" role="alert" style="margin-bottom:16px">{{ error }}</div>{% endif %}
+    <div class="field"><label for="fdr_id">The FDR this document claims to show</label>
+      <select id="fdr_id" name="fdr_id">{% for f in fdrs %}<option value="{{ f.id }}"{% if up and up.fdr_id == f.id %} selected{% endif %}>{{ f.id }} · {{ f.fd_number }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="file">Document</label><input id="file" name="file" type="file" accept="image/png,image/jpeg,application/pdf"><span class="hint">PNG, JPEG or PDF, up to 2 MB. The type is checked from the file's content.</span></div>
+    <button class="btn btn-solid">Upload and approve</button>
+  </form>
+  <div class="stack">
+    {% if up %}
+    <section class="vs-doc" aria-labelledby="doc-h">
+      <h2 id="doc-h">The baseline: <span class="st st-verified">Approved on the document</span></h2>
+      <figure class="object doc-fig">
+        {% if up.mime != 'application/pdf' %}<img src="/baseline/file/{{ up.id }}" alt="The uploaded document, {{ up.filename }}">{% else %}<a class="small" href="/baseline/file/{{ up.id }}">Open the PDF</a>{% endif %}
+        <figcaption class="small muted">{{ up.filename }} · {{ (up.size/1024)|round(1) }} KB · sha256 <span class="mono">{{ up.sha256[:12] }}…</span></figcaption>
+      </figure>
+      <p class="small muted">It can only look at the picture. It cannot tell whether the bank holds this deposit, its status, balance or lien, or whether the image was edited.</p>
+    </section>
+    {% else %}
+    <div class="empty">Upload a document to see the comparison.</div>
+    {% endif %}
+    {% if history %}
+    <section class="panel"><h2>Recent uploads</h2>
+      <ul class="timeline">{% for h in history %}<li><span class="muted">{{ when(h.uploaded_at) }}</span><span><a href="/baseline?uid={{ h.id }}">{{ h.filename }}</a> <span class="muted">for {{ h.fdr_id }}</span></span></li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% if up %}
+<section class="sec" aria-labelledby="sk-h">
+  <div class="sec-head"><h2 id="sk-h">Scourge, for the same deposit: {{ status(b.status) }}</h2>
+  <div class="actions">{% if latest %}<a class="btn btn-quiet btn-sm" href="/evidence/{{ latest.id }}">Open the proof</a>{% else %}<a class="btn btn-solid btn-sm" href="/fdrs/{{ b.f.id }}">Request a bank proof</a>{% endif %}</div></div>
+  <p class="muted small">{% if latest %}Not the document: what <span class="mono">{{ b.f.bank_host }}</span> itself said in a proven TLS session, {{ ago(latest.received_at) }}.{% else %}No bank-session proof yet. The document is not evidence, so nothing on the right is filled in.{% endif %}</p>
+  {{ cvw_view(cvw, ('Proof of ' ~ when(latest.received_at)) if latest else '', latest is not none and latest.decision in ('verified','discrepancy','insufficient_evidence')) }}
+</section>
+{% endif %}
+{% endblock %}

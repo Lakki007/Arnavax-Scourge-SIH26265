@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Register an FDR{% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <p class="small"><a href="{{ '/register' if s.role == 'officer' else '/portal' }}">{{ 'Register' if s.role == 'officer' else 'My deposits' }}</a></p>
+  <h1>{{ 'Register an FDR' if s.role == 'officer' else 'File your FDR' }}<span class="serif">What the institution says it deposited.</span></h1>
+  <p class="lede">These values are the claim. A bank-session proof is later checked against them field by field.</p>
+</div></div>
+<div class="grid-2">
+<form method="post" class="panel" novalidate>
+  <input type="hidden" name="csrf" value="{{ s.csrf }}">
+  {% if errors %}<div class="note note-bad" role="alert" style="margin-bottom:16px"><b>{{ errors|length }} field{{ 's' if errors|length > 1 }} need{{ '' if errors|length > 1 else 's' }} attention.</b> Nothing was saved.</div>{% endif %}
+  {% macro fld(name, label, hint, type='text', ph='') %}
+  <div class="field">
+    <label for="{{ name }}">{{ label }}</label>
+    <input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ v.get(name, '') }}" placeholder="{{ ph }}" {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-err"{% else %}aria-describedby="{{ name }}-hint"{% endif %}>
+    {% if errors.get(name) %}<span class="err" id="{{ name }}-err">{{ errors[name] }}</span>{% else %}<span class="hint" id="{{ name }}-hint">{{ hint }}</span>{% endif %}
+  </div>
+  {% endmacro %}
+  <div class="field">
+    <label for="institution_id">Institution</label>
+    <select id="institution_id" name="institution_id" {% if errors.get('institution_id') %}aria-invalid="true"{% endif %}>
+      <option value="">Choose…</option>
+      {% for i in institutions %}<option value="{{ i.id }}" {% if v.get('institution_id') == i.id %}selected{% endif %}>{{ i.name }} ({{ i.id }})</option>{% endfor %}
+    </select>
+    {% if errors.get('institution_id') %}<span class="err">{{ errors.institution_id }}</span>{% endif %}
+  </div>
+  {{ fld('fd_number', 'FD number', 'As printed on the receipt. Example: FD-0000888888.', ph='FD-0000888888') }}
+  <div class="field">
+    <label for="bank_host">Issuing bank (approved for bank-session proofs)</label>
+    <select id="bank_host" name="bank_host" {% if errors.get('bank_host') %}aria-invalid="true"{% endif %}>
+      {% for h in DEMO_ALLOW %}<option value="{{ h }}">{{ h }} (Mock Bank, synthetic)</option>{% endfor %}
+    </select>
+    {% if errors.get('bank_host') %}<span class="err">{{ errors.bank_host }}</span>{% else %}<span class="hint">Only banks on AICTE's allow-list can be proven. Others need a written head-office confirmation.</span>{% endif %}
+  </div>
+  {{ fld('principal', 'Principal (₹)', 'Digits only, up to 2 decimals. Example: 750000.', ph='750000') }}
+  {{ fld('issue_date', 'Issue date', 'Not in the future.', 'date') }}
+  {{ fld('maturity', 'Maturity date', 'After the issue date and in the future.', 'date') }}
+  <button class="btn btn-solid">{{ 'Register FDR' if s.role == 'officer' else 'File FDR with AICTE' }}</button>
+</form>
+<aside class="stack">
+  <div class="note"><b>After filing</b>, this is only the paper claim. AICTE then issues a single-use challenge and the institution proves the deposit from its bank's own server. If the deposit doesn't exist at the mock bank yet, open it from the <a href="/mockbank">Mock bank</a> console first. Otherwise the bank answers "no such deposit" and the proof ends as insufficient evidence.</div>
+  <div class="note">Try invalid input: a future issue date, a maturity before the issue date, or a duplicate FD number such as <span class="mono">FD-0000123456</span>.</div>
+</aside>
+</div>
+{% endblock %}

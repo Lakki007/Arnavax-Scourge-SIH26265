@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1>Audit log<span class="serif">Every request, proof and decision, in order.</span></h1>
+    <p class="lede">Append-only: the database rejects edits and deletions of entries. Only "Reset demo" clears it, and the reset itself is the first new entry.</p>
+  </div>
+  <a class="btn btn-ghost" href="/audit.csv">Export CSV</a>
+</div>
+<form class="toolbar" method="get">
+  <div class="field"><label for="kind">Event type</label>
+    <select id="kind" name="kind"><option value="">All events</option>{% for k in kinds %}<option value="{{ k }}" {% if k == kind %}selected{% endif %}>{{ k.replace('_',' ') }}</option>{% endfor %}</select></div>
+  <button class="btn btn-quiet">Apply</button>{% if kind %}<a class="btn btn-ghost" href="/audit">Clear</a>{% endif %}
+</form>
+{% if rows %}
+<div class="table-wrap"><table>
+  <thead><tr><th>#</th><th>Time</th><th>Actor</th><th>Event</th><th>FDR</th><th>Detail</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><td class="mono small">{{ r.id }}</td><td class="small">{{ when(r.at) }}</td><td class="small">{{ r.actor }}</td><td>{{ r.kind.replace('_',' ') }}</td><td>{% if r.fdr_id %}<a href="/fdrs/{{ r.fdr_id }}">{{ r.fdr_id }}</a>{% endif %}</td><td class="mono small muted" style="max-width:420px;word-break:break-word">{{ r.detail_json }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty">No events{% if kind %} of this type{% endif %}.</div>{% endif %}
+{% endblock %}

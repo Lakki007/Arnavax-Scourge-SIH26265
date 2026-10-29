@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Builds scourge_prove, scourge_verifierd and scourge_mockbank inside a pinned TLSNotary checkout.
+# Requires: git, Rust (the repo pins 1.95.0 via rust-toolchain.toml), ~4 GB RAM. First build takes several minutes.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+WORK="${TLSN_DIR:-$HERE/.tlsn}"
+if [ ! -d "$WORK/.git" ]; then git clone https://github.com/tlsnotary/tlsn "$WORK"; fi
+cd "$WORK"
+git fetch -q origin "$(cat "$HERE/rust/TLSN_COMMIT.txt")" || true
+git checkout -q "$(cat "$HERE/rust/TLSN_COMMIT.txt")"
+git apply --check "$HERE/rust/examples_Cargo.toml.patch" 2>/dev/null && git apply "$HERE/rust/examples_Cargo.toml.patch" || echo "Cargo.toml patch already applied or differs; continuing"
+mkdir -p crates/examples/scourge crates/examples/bsp crates/examples/fdr
+cp "$HERE"/rust/*.rs crates/examples/scourge/
+# the patch also registers older spike examples; provide them as stubs if absent so the manifest resolves
+for f in bsp/prove bsp/verifierd bsp/challenge bsp/mockbank fdr/fdr_proof fdr/real_bank_probe; do [ -f crates/examples/$f.rs ] || echo 'fn main() {}' > crates/examples/$f.rs; done
+cp "$HERE/rust/Cargo.lock" Cargo.lock
+cargo build --release --example scourge_prove --example scourge_verifierd --example scourge_mockbank
+cargo test --release --example scourge_verifierd   # JSON span-parser unit tests
+cp target/release/examples/scourge_{prove,verifierd,mockbank} "$HERE/bin/"
+echo "binaries copied to $HERE/bin"

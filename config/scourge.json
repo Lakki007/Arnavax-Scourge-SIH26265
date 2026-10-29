@@ -1,0 +1,68 @@
+{
+  "allow_hosts": [
+    "netbanking.mockbank.test"
+  ],
+  "trust": {
+    "mode": "test_ca",
+    "ca_der": "certs/test_ca.der"
+  },
+  "banks": {
+    "netbanking.mockbank.test": {
+      "name": "Mock Bank (synthetic)",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path_prefix": "/api/fd/details",
+          "disclosure": "body"
+        },
+        {
+          "method": "GET",
+          "path_prefix": "/api/accounts/summary",
+          "disclosure": "object"
+        }
+      ],
+      "content_type": "application/json",
+      "select_key": "depositNo",
+      "fields": {
+        "status": "status",
+        "balance": "currentBalance",
+        "principal": "principal",
+        "maturity": "maturityDate",
+        "holders": "holders",
+        "lien": "lien"
+      },
+      "required": [
+        "status",
+        "balance",
+        "maturity",
+        "lien"
+      ],
+      "active_values": [
+        "ACTIVE"
+      ],
+      "lien_ok_contains": [
+        "AICTE"
+      ],
+      "lien_bad_contains": [
+        "LOAN",
+        "OVERDRAFT"
+      ],
+      "holder_must_contain": "AICTE",
+      "inactive_values": [
+        "CLOSED",
+        "MATURED",
+        "PREMATURELY CLOSED",
+        "PRE CLOSED",
+        "PREMATURE CLOSURE",
+        "WITHDRAWN",
+        "PAID",
+        "LIQUIDATED",
+        "INACTIVE"
+      ]
+    }
+  },
+  "max_sent": 4096,
+  "max_recv": 65536,
+  "verifier_listen": "127.0.0.1:7047",
+  "app_internal": "127.0.0.1:8080"
+}

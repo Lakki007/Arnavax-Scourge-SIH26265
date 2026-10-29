@@ -1,0 +1,184 @@
+[
+ [
+  "h_rupee_no_paise",
+  "verified",
+  "verified",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_rs_one_decimal",
+  "verified",
+  "verified",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_cr_attached",
+  "insufficient_evidence",
+  "insufficient_evidence",
+  true,
+  {
+   "status": "match",
+   "balance": "unparseable",
+   "principal": "unparseable",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_one_paisa_short",
+  "discrepancy",
+  "discrepancy",
+  true,
+  {
+   "status": "match",
+   "balance": "mismatch",
+   "principal": "mismatch",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_dr_upper",
+  "insufficient_evidence",
+  "insufficient_evidence",
+  true,
+  {
+   "status": "match",
+   "balance": "unparseable",
+   "principal": "unparseable",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_crore_words",
+  "insufficient_evidence",
+  "insufficient_evidence",
+  true,
+  {
+   "status": "match",
+   "balance": "unparseable",
+   "principal": "unparseable",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_dotted_date",
+  "verified",
+  "verified",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_iso_slash",
+  "verified",
+  "verified",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_two_digit_year",
+  "insufficient_evidence",
+  "insufficient_evidence",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "unparseable",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_ordinal",
+  "insufficient_evidence",
+  "insufficient_evidence",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "unparseable",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_full_month_wrong",
+  "discrepancy",
+  "discrepancy",
+  true,
+  {
+   "status": "match",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "mismatch",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_closed_mixed",
+  "discrepancy",
+  "discrepancy",
+  true,
+  {
+   "status": "mismatch",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ],
+ [
+  "h_lien_marked",
+  "insufficient_evidence",
+  "insufficient_evidence",
+  true,
+  {
+   "status": "unrecognised",
+   "balance": "match",
+   "principal": "match",
+   "maturity": "match",
+   "holders": "match",
+   "lien": "match"
+  }
+ ]
+]

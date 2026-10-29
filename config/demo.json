@@ -1,0 +1,31 @@
+{
+  "_comment": "Demo-mode settings. Ports for the SYNTHETIC banks; the app supervises these processes. The app's own address is app_internal in scourge.json.",
+  "challenge_ttl_seconds": 900,
+  "confirmation_valid_days": 30,
+  "max_concurrent_proofs": 2,
+  "prover_timeout_seconds": 90,
+  "banks": {
+    "genuine": {
+      "port": 4400,
+      "host": "netbanking.mockbank.test",
+      "cert": "certs/bank_ok.der",
+      "key": "certs/bank_ok.key.der",
+      "label": "Mock Bank (synthetic, signed by the test CA)"
+    },
+    "fake": {
+      "port": 4401,
+      "host": "netbanking.mockbank.test",
+      "cert": "certs/bank_fake.der",
+      "key": "certs/bank_fake.key.der",
+      "label": "Institution-run fake bank (its own CA)"
+    },
+    "unlisted": {
+      "port": 4402,
+      "host": "netbanking.unlisted-bank.test",
+      "cert": "certs/bank_unlisted.der",
+      "key": "certs/bank_unlisted.key.der",
+      "label": "Real-looking bank that AICTE has not approved"
+    }
+  },
+  "maturity_warning_days": 90
+}

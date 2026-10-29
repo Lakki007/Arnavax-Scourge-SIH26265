@@ -1,0 +1,21 @@
+PASS  plain                        expected verified               got verified               baseline: bank agrees
+FAIL  rs_dot_lakh                  expected verified               got insufficient_evidence  same amount, Indian grouping, 'Rs.' prefix
+PASS  inr_prefix                   expected verified               got verified               same amount
+FAIL  slash_dash                   expected verified               got insufficient_evidence  '/-' is the usual Indian 'and no paise'
+PASS  western_grouping             expected verified               got verified               same amount
+FAIL  dr_balance                   expected insufficient_evidence  got verified               'Dr' is a debit, not a deposit balance: cannot be read as the deposit
+FAIL  lakh_words                   expected insufficient_evidence  got discrepancy            words, not a number: unreadable, must NOT read as Rs 25
+PASS  date_dd_mm                   expected verified               got verified               dd-mm-yyyy, same date
+PASS  date_slash                   expected verified               got verified               same date
+FAIL  date_mon                     expected verified               got insufficient_evidence  same date, month name
+FAIL  date_mon_space               expected verified               got insufficient_evidence  same date
+FAIL  date_mon_upper               expected verified               got insufficient_evidence  same date (Finacle style)
+FAIL  date_wrong                   expected discrepancy            got insufficient_evidence  really a different date
+FAIL  amount_wrong                 expected discrepancy            got insufficient_evidence  really less money
+PASS  status_Active                expected verified               got verified               case only
+FAIL  status_open                  expected verified               got discrepancy            common CBS synonym for an active deposit
+PASS  status_matured               expected discrepancy            got discrepancy            known not-active state
+PASS  status_prematurely_closed    expected discrepancy            got discrepancy            known not-active state
+FAIL  status_weird                 expected insufficient_evidence  got discrepancy            unrecognised wording: unknown, must not be an accusation
+
+8/19 match the hand-worked answer

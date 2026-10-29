@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_m.html" import lanes_head %}
+{% block title %}Proof run {{ j.id }}{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <p class="crumb"><a href="{{ '/portal' if s.role == 'institution' else '/fdrs/' ~ f.id }}">{{ 'My deposits' if s.role == 'institution' else f.id }}</a> <span aria-hidden="true">/</span> proof run</p>
+    <h1><span id="job-state">{{ {'running':'Running','done':'Finished','failed':'Failed','cancelled':'Cancelled'}[j.state] }}</span><span class="serif">Proving {{ f.fd_number }} between three parties</span></h1>
+    <p class="lede small">{{ 'Deposit details page' if mode.endpoint == 'details' else 'Accounts summary page' }} at {{ DEMO.banks[mode.target].label }}{% if mode.tamper %}, hiding the lien field{% endif %}. Every row below is an event reported by the prover as it happens.</p>
+  </div>
+  <div class="head-status" id="job-result" aria-live="polite">
+    <span id="job-spin" class="spinner" aria-hidden="true" {% if j.state != 'running' %}hidden{% endif %}></span>
+    <span id="job-result-body" class="muted small">Waiting for the verifier's decision…</span>
+  </div>
+</div>
+
+<div class="progress-shell" id="job" data-job="{{ j.id }}" data-csrf="{{ s.csrf }}">
+  <figure class="lanes object" aria-label="Live sequence of the proof">
+    {{ lanes_head() }}
+    <ol class="lanes-body" id="stages" aria-live="polite"></ol>
+    <p class="lanes-wait" id="job-wait" {% if j.state != 'running' %}hidden{% endif %}><span class="spinner" aria-hidden="true"></span> Waiting for the next event…</p>
+    <figcaption class="lanes-cap">The bank and AICTE never connect to each other. The bank sees an ordinary logged-in session.</figcaption>
+  </figure>
+  <div>
+    <form method="post" action="/jobs/{{ j.id }}/cancel" id="cancel-form" {% if j.state != 'running' %}hidden{% endif %}>
+      <input type="hidden" name="csrf" value="{{ s.csrf }}">
+      <button class="btn btn-ghost">Cancel this proof</button>
+      <p class="why">Stops the prover. If the verifier already accepted the challenge, it stays used.</p>
+    </form>
+    <div id="job-actions"></div>
+  </div>
+</div>
+<div class="sec" id="job-receipt" hidden></div>
+<noscript><p class="note">Turn on JavaScript for live progress, or reload this page to see the latest state.</p></noscript>
+{% endblock %}

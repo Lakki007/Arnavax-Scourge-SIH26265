@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}System{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1>System<span class="serif">The separate processes behind every proof.</span></h1>
+    <p class="lede">The verifier and the banks run as their own processes. Stop one to see how a failed dependency is handled: nothing is faked, and the proof fails with a reason.</p>
+  </div>
+</div>
+<div class="grid-2">
+  <section class="panel" aria-labelledby="svc-h">
+    <h2 id="svc-h">Services</h2>
+    {% set names = {'verifier': ("AICTE verifier", "scourge_verifierd, " ~ cfg.verifier_listen), 'genuine': ("Mock bank (genuine)", DEMO.banks.genuine.host ~ " on port " ~ DEMO.banks.genuine.port), 'fake': ("Fake bank (attack demo)", "own CA, port " ~ DEMO.banks.fake.port), 'unlisted': ("Unapproved bank (attack demo)", DEMO.banks.unlisted.host)} %}
+    {% if s.role != 'officer' %}<p class="muted small">These services are AICTE's. Sign in as the officer to stop or start them.</p>{% endif %}
+    {% for k, v in names.items() %}
+    <div class="svc">
+      <div><span class="{{ 'dot-ok' if health[k] else 'dot-bad' }}" aria-hidden="true"></span><b style="font-weight:500">{{ v[0] }}</b><div class="muted small">{{ v[1] }}</div></div>
+      <span class="small {{ '' if health[k] else 'res-mismatch' }}">{{ 'running' if health[k] else 'stopped' }}</span>
+      {% if s.role == 'officer' %}<form method="post" action="/system/service"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="name" value="{{ k }}"><input type="hidden" name="op" value="{{ 'stop' if health[k] else 'start' }}">
+        <button class="btn btn-sm {{ 'btn-ghost' if health[k] else 'btn-solid' }}">{{ 'Stop' if health[k] else 'Start' }}</button></form>{% else %}<span></span>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  <section class="panel" aria-labelledby="cfg-h">
+    <h2 id="cfg-h">Verifier policy</h2>
+    <dl class="kv">
+      <dt>Trust roots</dt><dd>{% if cfg.trust.mode == 'test_ca' %}<span class="badge-syn">Synthetic</span> test CA only (<span class="mono">{{ cfg.trust.ca_der }}</span>){% else %}Public Web PKI (Mozilla roots){% endif %}</dd>
+      <dt>Approved bank hosts</dt><dd class="mono">{{ cfg.allow_hosts|join(', ') }}</dd>
+      <dt>Approved endpoints</dt><dd>{% for h, b in cfg.banks.items() %}{% for e in b.endpoints %}<div class="mono small">{{ e.method }} {{ e.path_prefix }} <span class="muted">({{ 'whole body' if e.disclosure == 'body' else 'record only' }})</span></div>{% endfor %}{% endfor %}</dd>
+      <dt>Required fields</dt><dd>{% for h, b in cfg.banks.items() %}{{ b.required|join(', ') }}{% endfor %}</dd>
+      <dt>MPC limits</dt><dd>{{ cfg.max_sent }} B request, {{ cfg.max_recv }} B response</dd>
+      <dt>Challenge lifetime</dt><dd>{{ (DEMO.challenge_ttl_seconds/60)|int }} minutes, single use</dd>
+      <dt>Confirmation valid for</dt><dd>{{ DEMO.confirmation_valid_days }} days (release gate)</dd>
+      <dt>Concurrent proofs</dt><dd>at most {{ DEMO.max_concurrent_proofs }}; each times out after {{ DEMO.prover_timeout_seconds }} s</dd>
+    </dl>
+    <p class="muted small" style="margin-bottom:0">The verifier refuses to start with an empty allow-list or without its internal key. Edit <span class="mono">config/scourge.json</span> and restart to change policy.</p>
+  </section>
+</div>
+{% endblock %}

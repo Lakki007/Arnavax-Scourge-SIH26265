@@ -1,0 +1,15 @@
+PASS  h_rupee_no_paise             expected verified               got verified               same amount
+PASS  h_rs_one_decimal             expected verified               got verified               same amount
+PASS  h_cr_attached                expected insufficient_evidence  got insufficient_evidence  'Cr' is ambiguous: credit or crore
+PASS  h_one_paisa_short            expected discrepancy            got discrepancy            really one paisa less
+PASS  h_dr_upper                   expected insufficient_evidence  got insufficient_evidence  debit
+PASS  h_crore_words                expected insufficient_evidence  got insufficient_evidence  '2.5 Cr' is crores in words: unreadable
+PASS  h_dotted_date                expected verified               got verified               same date
+PASS  h_iso_slash                  expected verified               got verified               same date
+PASS  h_two_digit_year             expected insufficient_evidence  got insufficient_evidence  century unknown
+PASS  h_ordinal                    expected insufficient_evidence  got insufficient_evidence  not a format the reader declares
+PASS  h_full_month_wrong           expected discrepancy            got discrepancy            really a different date
+PASS  h_closed_mixed               expected discrepancy            got discrepancy            known inactive, odd case/space
+PASS  h_lien_marked                expected insufficient_evidence  got insufficient_evidence  unlisted wording
+
+13/13 match the hand-worked answer

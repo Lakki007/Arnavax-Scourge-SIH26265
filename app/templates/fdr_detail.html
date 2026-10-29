@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% from "_m.html" import status, decision, receipt, cvw as cvw_view %}
+{% block title %}{{ b.f.id }}{% endblock %}
+{% block main %}
+{% set f = b.f %}
+<div class="page-head">
+  <div>
+    <p class="crumb"><a href="{{ '/register' if s.role == 'officer' else '/portal' }}">{{ 'Register' if s.role == 'officer' else 'My deposits' }}</a> <span aria-hidden="true">/</span> {{ f.id }}</p>
+    <h1><span class="mono-title">{{ f.fd_number }}</span><span class="serif">{{ f.inst_name }}, {{ f.inst_city }}</span></h1>
+  </div>
+  <div class="head-status">{{ status(b.status) }}{% if b.status[2] %}<span class="muted small">{{ b.status[2] }}</span>{% endif %}</div>
+</div>
+{% if request.query_params.get('registered') %}<div class="note note-good" role="status" style="margin-bottom:24px"><b>FDR registered.</b> Only paper vouches for it until a bank-session proof is verified and accepted.</div>{% endif %}
+
+{# ---- the one next step ---- #}
+<section class="next next-{{ nxt.kind }}" id="proof" aria-labelledby="next-h">
+  <div class="next-text">
+    <h2 id="next-h">{{ nxt.title }}</h2>
+    <p>{{ nxt.text }}{% if b.open %} Challenge <span class="mono">{{ b.open.id }}</span>, open until {{ when(b.open.expires_at) }}.{% endif %}</p>
+    {% if reason and nxt.kind == 'escalate' %}<p class="next-reason">{{ reason }}</p>{% endif %}
+  </div>
+  <div class="next-actions">
+  {% if s.role == 'officer' %}
+    {% if nxt.kind == 'waiting' %}
+      <form method="post" action="/signin"><input type="hidden" name="role" value="institution:{{ f.institution_id }}"><input type="hidden" name="next" value="/challenges/{{ b.open.id }}"><button class="btn btn-solid">Switch to {{ f.institution_id }} to answer it</button></form>
+      <form method="post" action="/fdrs/{{ f.id }}/challenge/withdraw"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost">Withdraw challenge</button></form>
+    {% elif nxt.kind == 'accept' %}
+      <form method="post" action="/fdrs/{{ f.id }}/decide"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="action" value="accept"><input type="hidden" name="evidence_id" value="{{ latest.id }}"><button class="btn btn-solid">Accept as confirmed</button></form>
+      <button class="btn btn-danger" type="button" data-open="esc-dlg">Escalate</button>
+    {% elif nxt.kind == 'escalate' %}
+      <button class="btn btn-danger" type="button" data-open="esc-dlg">Escalate</button>
+      <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost">Request bank proof</button></form>
+    {% elif nxt.kind == 'release' %}
+      <button class="btn btn-solid" type="button" data-open="rel-dlg">Release deposit</button>
+      <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost">Request bank proof</button></form>
+    {% elif nxt.kind in ('request', 'escalated') %}
+      <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-solid" {% if not gates.challenge[0] %}disabled aria-describedby="why-ch"{% endif %}>Request bank proof</button></form>
+      {% if not gates.challenge[0] %}<p class="why" id="why-ch">{{ gates.challenge[1] }}</p>{% endif %}
+    {% endif %}
+  {% elif b.open %}
+    <a class="btn btn-solid" href="/challenges/{{ b.open.id }}">Answer this challenge</a>
+  {% endif %}
+  </div>
+</section>
+
+{# ---- claim vs witness ---- #}
+{{ cvw_view(cvw, ('Proof of ' ~ when(latest.received_at)) if latest else '', latest is not none and latest.decision in ('verified','discrepancy','insufficient_evidence')) }}
+{% if latest and latest.decision == 'rejected' %}<p class="note note-bad" style="margin-top:16px"><b>The latest proof was rejected:</b> {{ reason }} Nothing it contained is treated as the bank's word.</p>{% endif %}
+{% if latest and latest.decision == 'insufficient_evidence' and reason %}<p class="note note-warn" style="margin-top:16px"><b>Not enough to decide:</b> {{ reason }}</p>{% endif %}
+
+{# ---- the receipt ---- #}
+{% if rc %}
+<div class="sec">
+  <div class="sec-head"><h2>What AICTE actually received</h2><div class="actions"><a class="btn btn-quiet btn-sm" href="/evidence/{{ latest.id }}">Full evidence</a><a class="btn btn-ghost btn-sm" href="/evidence/{{ latest.id }}/export">Export JSON</a></div></div>
+  {{ receipt(rc, f.bank_host, 'Latest proof, ' ~ when(latest.received_at)) }}
+</div>
+{% elif not latest %}
+<div class="sec"><p class="muted">No bank-session proof yet. When the institution answers a challenge, the bank's exact response appears here, with everything AICTE did not receive blacked out.</p></div>
+{% endif %}
+
+{# ---- secondary material, folded ---- #}
+<div class="folds">
+  <details class="fold">
+    <summary>Registered details <span class="muted small">FDR {{ f.id }}, registered {{ when(f.created_at) }}</span></summary>
+    <dl class="kv" style="margin-top:14px">
+      <dt>Institution</dt><dd>{{ f.institution_id }}</dd>
+      <dt>Bank host</dt><dd class="mono">{{ f.bank_host }}</dd>
+      <dt>Principal</dt><dd>{{ inr(f.principal) }}</dd>
+      <dt>Issued</dt><dd>{{ f.issue_date }}</dd>
+      <dt>Matures</dt><dd>{{ f.maturity }}</dd>
+      {% if f.released_at %}<dt>Released</dt><dd>{{ when(f.released_at) }}</dd>{% endif %}
+    </dl>
+    {% if bank_dep %}<p class="muted small" style="margin:14px 0 0">Mock bank behaviour for this deposit: <b style="color:var(--ink-2)">{{ BEHAVIOURS[bank_dep.behaviour] }}</b>. <a href="/mockbank#{{ f.fd_number }}">Change it</a></p>
+    {% else %}<p class="note note-warn small" style="margin:14px 0 0">This deposit does not exist at the mock bank, so a proof ends as insufficient evidence. {% if s.role == 'officer' %}<a href="/mockbank">Open it at the mock bank</a>.{% endif %}</p>{% endif %}
+  </details>
+  <details class="fold" {% if events|length < 4 %}open{% endif %}>
+    <summary>History <span class="muted small">{{ events|length }} events</span></summary>
+    {% if events %}
+    <ol class="tl">
+      {% for e in events %}{% set d = e.detail_json|fromjson %}<li><span class="tl-t">{{ when(e.at) }}</span><span><b>{{ e.kind.replace('_',' ') }}</b> <span class="muted">by {{ e.actor }}</span>{% if d.get('decision') %}: {{ LABEL.get(d.decision, d.decision) }}{% endif %}{% if d.get('behaviour') %}: {{ BEHAVIOURS.get(d.behaviour, d.behaviour) }}{% endif %}{% if d.get('note') %}<span class="tl-note">“{{ d.note }}”</span>{% endif %}</span></li>{% endfor %}
+    </ol>
+    {% else %}<p class="muted small">Nothing has happened to this FDR yet.</p>{% endif %}
+  </details>
+  {% if b.evidence %}
+  <details class="fold">
+    <summary>All proofs <span class="muted small">{{ b.evidence|length }}</span></summary>
+    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Received</th><th>Decision</th><th>Challenge</th></tr></thead><tbody>
+      {% for e in b.evidence %}<tr><td><a class="rowlink" href="/evidence/{{ e.id }}">{{ when(e.received_at) }}</a></td><td>{{ decision(e.decision) }}</td><td class="mono small">{{ e.challenge_id }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+  {% endif %}
+  {% if challenges %}
+  <details class="fold">
+    <summary>Challenges <span class="muted small">{{ challenges|length }}</span></summary>
+    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Challenge</th><th>Issued</th><th>State</th></tr></thead><tbody>
+      {% for c in challenges %}<tr><td class="mono small">{{ c.id }}</td><td class="small">{{ when(c.issued_at) }}</td><td class="small">{% if c.state == 'issued' and c.expires_at < now %}expired{% else %}{{ c.state }}{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+  {% endif %}
+</div>
+
+{% if s.role == 'officer' and latest %}
+<dialog id="esc-dlg" aria-labelledby="esc-title">
+  <h2 id="esc-title">Escalate {{ f.fd_number }}</h2>
+  <p class="muted small">Records the decision against proof #{{ latest.id }} ({{ LABEL[latest.decision] }}). Release stays blocked.</p>
+  <form method="post" action="/fdrs/{{ f.id }}/decide">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="action" value="escalate"><input type="hidden" name="evidence_id" value="{{ latest.id }}">
+    <div class="field"><label for="esc-note">Reason (at least 10 characters)</label><textarea id="esc-note" name="note" rows="3" minlength="10" required placeholder="e.g. Bank shows a loan against the deposit; refer to the head office."></textarea></div>
+    <div class="actions"><button class="btn btn-danger">Escalate</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="rel-dlg" aria-labelledby="rel-title">
+  <h2 id="rel-title">Release {{ f.fd_number }}?</h2>
+  <p class="muted small">Release is final in this demo. It is allowed only with an accepted bank-session confirmation from the last {{ DEMO.confirmation_valid_days }} days.</p>
+  <form method="post" action="/fdrs/{{ f.id }}/decide">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="action" value="release"><input type="hidden" name="evidence_id" value="{{ latest.id }}">
+    <div class="field"><label for="rel-note">Release order reference (at least 10 characters)</label><textarea id="rel-note" name="note" rows="2" minlength="10" required placeholder="e.g. RB/REL/2026/0142, 10-year term completed"></textarea></div>
+    <div class="actions"><button class="btn btn-solid">Release deposit</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

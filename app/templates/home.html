@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_m.html" import decision, lanes_static, receipt %}
+{% block title %}Is the deposit still there?{% endblock %}
+{% block frame_class %}home{% endblock %}
+{% block main %}
+<div class="stars" aria-hidden="true"></div>
+<svg class="sparkle" style="left:14%;top:21%" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 0c.6 6.2 5.8 11.4 12 12-6.2.6-11.4 5.8-12 12-.6-6.2-5.8-11.4-12-12C6.2 11.4 11.4 6.2 12 0z"/></svg>
+<svg class="sparkle v" style="right:13%;top:34%;width:28px;height:28px" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 0c.6 6.2 5.8 11.4 12 12-6.2.6-11.4 5.8-12 12-.6-6.2-5.8-11.4-12-12C6.2 11.4 11.4 6.2 12 0z"/></svg>
+<section class="hero">
+  <span class="pill"><span class="tag">Demo</span>Bank-session proof for AICTE security deposits</span>
+  <h1 style="margin-top:22px">Is the deposit still there?<span class="serif">Ask the bank, not the paper.</span></h1>
+  <form class="giant" action="/find" method="get" role="search">
+    <span class="coin" aria-hidden="true">₹</span>
+    <label for="fd" class="skip">FD number</label>
+    <input id="fd" name="fd" autocomplete="off" spellcheck="false" placeholder="FD-0000123456" aria-describedby="fd-help">
+  </form>
+  <p class="giant-help" id="fd-help">Type an FD number from the sample register and press <kbd>Enter</kbd>{% if not s %}. You'll be asked to choose a demo role{% endif %}.</p>
+  <div class="hero-ctas">
+    {% if s %}<a class="btn btn-solid" href="{{ '/register' if s.role == 'officer' else '/portal' }}">{{ 'Open the register' if s.role == 'officer' else 'Open my deposits' }}</a>
+    {% else %}<a class="btn btn-solid" href="/signin">Start the demo</a>{% endif %}
+    <a class="btn btn-ghost" href="/how">How it works</a>
+  </div>
+</section>
+
+<section class="home-fig" aria-labelledby="fig-h">
+  <h2 id="fig-h" class="fig-title">Today, a paper receipt vouches for ten years.<span class="serif">With Scourge, the bank's own server does, whenever AICTE asks.</span></h2>
+  {{ lanes_static() }}
+</section>
+
+{% if spec %}
+<section class="home-spec" aria-labelledby="spec-h">
+  <h2 id="spec-h" class="fig-title">The latest proof, exactly as AICTE received it.<span class="serif">{{ spec.e.fd_number }}, {{ spec.e.inst }}. {{ LABEL[spec.e.decision] }}, {{ ago(spec.e.received_at) }}.</span></h2>
+  {{ receipt(spec.rc, 'netbanking.mockbank.test', 'Bank response, as received by AICTE') }}
+  <p class="center" style="margin-top:18px"><a class="btn btn-quiet" href="/evidence/{{ spec.e.id }}">Open this proof</a></p>
+</section>
+{% endif %}
+{% endblock %}

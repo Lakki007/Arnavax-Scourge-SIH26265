@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_m.html" import status, vouch %}
+{% block title %}Register{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1>{% if total %}{{ paper }} of {{ total }} deposits rest on paper alone.{% else %}No deposits registered.{% endif %}<span class="serif">{% if bank_ok %}{{ bank_ok }} {{ 'is' if bank_ok == 1 else 'are' }} vouched for by the bank's own server{% else %}None is vouched for by a bank's server yet{% endif %}{% if bank_bad %}; for {{ bank_bad }}, the bank's server contradicts the paper{% endif %}.</span></h1>
+    <p class="lede">A paper receipt shows what an institution handed in. A bank-session proof shows what the bank's server says now. Open a deposit to ask for one.</p>
+  </div>
+  <a class="btn btn-solid" href="/fdrs/new">Register an FDR</a>
+</div>
+{% set m = monitor %}
+<section class="monitor" aria-label="Needs attention">
+  <h2 class="small" style="margin:0 0 8px">Needs attention</h2>
+  <div class="grid-4">
+    {% for key, title, hint in [('flagged','Bank contradicts paper','discrepancy or escalated: keep release blocked'),('matured','Matured, not released','renew with a fresh bank proof, or release'),('maturing','Maturing within ' ~ m.warn_days ~ ' days','ask for the renewed FDR and a new proof'),('recheck','Re-check due','no current bank confirmation')] %}
+    <div class="panel" style="padding:14px">
+      <div><b style="font-size:1.4em">{{ m[key]|length }}</b> <span>{{ title }}</span></div>
+      <div class="muted small">{{ hint }}</div>
+      {% for r, d in m[key][:3] %}<div class="small"><a class="mono" href="/fdrs/{{ r.f.id }}">{{ r.f.fd_number }}</a>{% if d is not none and key in ('matured','maturing') %} <span class="muted">{{ (-d ~ ' days ago') if d < 0 else ('in ' ~ d ~ ' days') }}</span>{% endif %}</div>{% endfor %}
+      {% if m[key]|length > 3 %}<div class="muted small">+{{ m[key]|length - 3 }} more</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+<form class="toolbar" method="get" role="search">
+  <div class="field" style="min-width:260px;flex:1">
+    <label for="q">Search FD number, FDR ID or institution</label>
+    <input id="q" type="search" name="q" value="{{ q }}" placeholder="e.g. FD-0000777777">
+  </div>
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="">All statuses</option>
+      {% for k, lab in [('submitted','Submitted by institution'),('requested','Proof requested'),('verified','Verified, awaiting officer'),('confirmed','Confirmed by bank session'),('discrepancy','Discrepancy'),('insufficient_evidence','Insufficient evidence'),('rejected','Rejected'),('escalated','Escalated'),('stale','Confirmation expired'),('released','Released')] %}
+      <option value="{{ k }}" {% if fstatus == k %}selected{% endif %}>{{ lab }} ({{ counts.get(k, 0) }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button class="btn btn-quiet">Apply</button>
+  {% if q or fstatus %}<a class="btn btn-ghost" href="/register">Clear</a>{% endif %}
+</form>
+{% if rows %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Deposit</th><th>Institution</th><th class="num">Principal</th><th>Vouched for by</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a class="rowlink mono" href="/fdrs/{{ r.f.id }}">{{ r.f.fd_number }}</a><div class="muted small">{{ r.f.id }}, matures {{ r.f.maturity }}</div></td>
+      <td>{{ r.f.inst_name }}<div class="muted small">{{ r.f.institution_id }}</div></td>
+      <td class="num">{{ inr(r.f.principal) }}</td>
+      <td>{{ vouch(r) }}</td>
+      <td>{{ status(r.status) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}<nav class="pager" aria-label="Register pages"><span class="muted small">Showing {{ (page-1)*200 + 1 }}–{{ (page-1)*200 + rows|length }} of {{ matched }}. Search or filter to narrow.</span>
+  {% if page > 1 %}<a class="btn btn-ghost btn-sm" href="?q={{ q|urlencode }}&status={{ fstatus }}&page={{ page-1 }}">Previous</a>{% endif %}
+  {% if page < pages %}<a class="btn btn-ghost btn-sm" href="?q={{ q|urlencode }}&status={{ fstatus }}&page={{ page+1 }}">Next</a>{% endif %}</nav>{% endif %}
+</div>
+{% else %}
+<div class="empty">
+  {% if q or fstatus %}No FDR matches these filters. <a href="/register">Clear the filters</a>.
+  {% else %}The register is empty. <a href="/fdrs/new">Register the first FDR</a>, or reset the demo to load the sample register.{% endif %}
+</div>
+{% endif %}
+{% endblock %}

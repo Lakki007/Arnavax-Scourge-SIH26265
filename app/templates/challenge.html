@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Answer {{ c.id }}{% endblock %}
+{% block main %}
+{% set f = b.f %}
+<div class="page-head">
+  <div>
+    <p class="crumb"><a href="/portal">My deposits</a> <span aria-hidden="true">/</span> {{ c.id }}</p>
+    <h1>Prove <span class="mono" style="font-size:.85em">{{ f.fd_number }}</span><span class="serif">from your bank's own server.</span></h1>
+    <p class="lede">Challenge <span class="mono">{{ c.id }}</span>, issued {{ when(c.issued_at) }}. {% if live %}Valid until {{ when(c.expires_at) }}, single use.{% endif %}</p>
+  </div>
+</div>
+{% if running %}
+  <div class="note" role="status"><b>A proof for this challenge is running now.</b> <a href="/jobs/{{ running.id }}">Watch its progress</a>.</div>
+{% elif not live %}
+  <div class="note note-warn" role="status"><b>This challenge can no longer be answered</b> ({% if c.state == 'consumed' %}already used{% elif c.state == 'withdrawn' %}withdrawn by AICTE{% else %}expired{% endif %}). {% if last_job %}<a href="/jobs/{{ last_job.id }}">See the last run</a>. {% endif %}Ask AICTE for a new request.</div>
+{% else %}
+{% if last_job and last_job.state == 'failed' %}<div class="note note-bad" role="alert" style="margin-bottom:20px"><b>The last attempt failed:</b> {{ last_job.error }} The challenge was not used, so you can retry.</div>{% endif %}
+<div class="grid-2">
+  <form method="post" action="/challenges/{{ c.id }}/prove" class="prove-form">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <h2>Run the demo prover</h2>
+    <p class="muted small" style="margin-top:-6px">Runs the real <span class="mono">scourge_prove</span> on this server with your <b>mock</b> bank session. On a real deployment it runs on your own computer with your net-banking login.</p>
+    <fieldset class="choice">
+      <legend>Bank page to prove</legend>
+      <label><input type="radio" name="endpoint" value="details" checked><span><b>Deposit details</b><span class="d">The page shows only this deposit, so the whole response is disclosed and its context is verified.</span></span></label>
+      <label><input type="radio" name="endpoint" value="summary"><span><b>Accounts summary</b><span class="d">The page lists your PAN, savings and other deposits. Only this deposit's record is disclosed.</span></span></label>
+    </fieldset>
+    <details style="margin-bottom:20px">
+      <summary class="small" style="cursor:pointer;color:var(--ink-2)">Try to cheat (shows what the verifier rejects)</summary>
+      <fieldset class="choice" style="margin-top:12px">
+        <legend>Where the prover connects</legend>
+        <label><input type="radio" name="target" value="genuine" checked><span><b>The genuine mock bank</b><span class="d">{{ DEMO.banks.genuine.label }}</span></span></label>
+        <label><input type="radio" name="target" value="fake"><span><b>Your own fake bank</b><span class="d">Same hostname, always says ACTIVE, certificate from a CA you control.</span></span></label>
+        <label><input type="radio" name="target" value="unlisted"><span><b>A bank AICTE has not approved</b><span class="d">Valid certificate, but <span class="mono">{{ DEMO.banks.unlisted.host }}</span> is not on the allow-list.</span></span></label>
+      </fieldset>
+      <fieldset class="choice" style="margin-top:12px;margin-bottom:0">
+        <legend>Disclosure</legend>
+        <label><input type="radio" name="tamper" value="" checked><span><b>Honest disclosure</b></span></label>
+        <label><input type="radio" name="tamper" value="hide_lien"><span><b>Hide the lien field</b><span class="d">Withhold the bytes that show a loan. Applies to the accounts summary page.</span></span></label>
+      </fieldset>
+    </details>
+    <button class="btn btn-solid">Prove from my bank</button>
+    <p class="why">Uses the challenge once the verifier accepts it. If the verifier is unreachable, the challenge stays unused and you can retry.</p>
+  </form>
+  <aside class="stack">
+    <section class="split-sec" aria-labelledby="split-h">
+      <h2 id="split-h">What crosses, what stays</h2>
+      <div class="split object">
+        <div class="split-col cross"><span class="split-k">Crosses to AICTE</span>
+          <ul>
+            <li>The bank's hostname and that its certificate is genuine</li>
+            <li>The request method and approved path</li>
+            <li>Status line, content type, date</li>
+            <li data-ep="details">The deposit-details response, whole</li>
+            <li data-ep="summary" hidden>This deposit's record, nothing around it</li>
+          </ul></div>
+        <div class="split-col stay"><span class="split-k">Stays on your machine</span>
+          <ul>
+            <li>Password, OTP, cookies, session headers</li>
+            <li>The query string</li>
+            <li data-ep="summary" hidden>Your PAN, savings account and other deposits</li>
+            <li>Your local copy of the full response</li>
+          </ul></div>
+      </div>
+      <p class="muted small">Changes with the page you choose. After the proof you can compare both views byte for byte.</p>
+    </section>
+    <details class="fold">
+      <summary>On a real bank <span class="muted small">the command for your own computer</span></summary>
+      <p class="muted small" style="margin-top:-6px">Run this on your own computer after logging in to net banking. Copy the deposit-details request headers from your browser into <span class="mono">headers.txt</span>; they never leave your machine.</p>
+      <div class="codebox" id="cli">{{ cli }}<button class="btn btn-quiet btn-sm" type="button" data-copy="cli">Copy</button></div>
+      <p class="muted small" style="margin-bottom:0">The token in this command is your challenge credential. Do not share it.</p>
+    </details>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

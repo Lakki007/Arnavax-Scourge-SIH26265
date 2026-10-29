@@ -1,0 +1,43 @@
+"""Paths, configuration and secrets. Secrets are generated on first run into var/ (mode 0600)
+and never rendered into pages, logs or evidence."""
+import json
+import os
+import secrets
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+VAR = Path(os.environ.get("SCOURGE_VAR", ROOT / "var"))
+BIN = Path(os.environ.get("SCOURGE_BIN", ROOT / "bin"))
+CONFIG_PATH = ROOT / "config" / "scourge.json"
+DEMO_PATH = ROOT / "config" / "demo.json"
+DB_PATH = VAR / "scourge.db"
+BANK_STATE = VAR / "bank_state.json"
+LOGS = VAR / "logs"
+UPLOADS = VAR / "uploads"
+JOBTMP = VAR / "jobs"
+
+for d in (VAR, LOGS, UPLOADS, JOBTMP):
+    d.mkdir(parents=True, exist_ok=True)
+
+VERIFIER_CFG = json.loads(CONFIG_PATH.read_text())
+DEMO = json.loads(DEMO_PATH.read_text())
+
+
+def _secret(name: str, nbytes: int = 32) -> str:
+    p = VAR / name
+    if not p.exists():
+        p.write_text(secrets.token_hex(nbytes))
+        os.chmod(p, 0o600)
+    return p.read_text().strip()
+
+
+INTERNAL_KEY = os.environ.get("SCOURGE_INTERNAL_KEY") or _secret("internal.key")
+SESSION_KEY = os.environ.get("SCOURGE_SESSION_KEY") or _secret("session.key")
+
+UPLOAD_MAX_BYTES = 2 * 1024 * 1024
+UPLOAD_TYPES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff", "application/pdf": b"%PDF-"}
+
+
+# Deployment switches (environment only; never written to disk or logs)
+ACCESS_CODE = os.environ.get("SCOURGE_ACCESS_CODE", "")      # if set, sign-in requires this shared code
+COOKIE_SECURE = os.environ.get("SCOURGE_COOKIE_SECURE", "") == "1"   # set to 1 behind HTTPS

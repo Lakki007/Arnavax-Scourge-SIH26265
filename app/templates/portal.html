@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_m.html" import status, vouch %}
+{% block title %}My deposits{% endblock %}
+{% block main %}
+<div class="page-head">
+  <div>
+    <h1>{{ inst.name }}<span class="serif">Security deposits held for AICTE.</span></h1>
+    <p class="lede">When AICTE asks for a bank proof, answer it from your own net-banking session. AICTE's verifier sees only the deposit record, never your password, cookies, PAN or other accounts.</p>
+  </div>
+  <div class="next-actions"><a class="btn btn-ghost" href="/fdrs/new">File a new FDR</a></div>
+</div>
+{% if notfound %}<div class="note note-warn" role="status" style="margin-bottom:20px">No deposit <span class="mono">{{ notfound }}</span> is registered for your institution.</div>{% endif %}
+
+<section aria-labelledby="open-h" style="margin-bottom:36px">
+  <h2 id="open-h">Open requests from AICTE</h2>
+  {% if open_ch %}
+  <div class="asks">
+    {% for c in open_ch %}
+    <section class="next next-request ask" aria-label="Request {{ c.id }}">
+      <div class="next-text">
+        <h3><span class="mono">{{ c.fd_number }}</span></h3>
+        <p>AICTE asks your bank's server to confirm this deposit. Challenge <span class="mono">{{ c.id }}</span>, single use, open until {{ when(c.expires_at) }}.</p>
+      </div>
+      <div class="next-actions"><a class="btn btn-solid" href="/challenges/{{ c.id }}">Prove from my bank</a></div>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">No open requests. AICTE's officer creates one from the register. In the demo, sign in as the officer and choose "Request bank proof" on a deposit.</div>
+  {% endif %}
+</section>
+
+<section aria-labelledby="dep-h" style="margin-bottom:36px">
+  <h2 id="dep-h">Registered deposits</h2>
+  <div class="table-wrap"><table><thead><tr><th>FD number</th><th class="num">Principal</th><th>Matures</th><th>Status at AICTE</th><th>Vouched for by</th></tr></thead><tbody>
+    {% for r in rows %}<tr><td><a class="rowlink mono" href="/fdrs/{{ r.f.id }}">{{ r.f.fd_number }}</a></td><td class="num">{{ inr(r.f.principal) }}</td><td>{{ r.f.maturity }}</td><td>{{ status(r.status) }}</td><td>{{ vouch(r) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+{% if recent_jobs %}
+<section aria-labelledby="runs-h">
+  <h2 id="runs-h">Recent proof runs</h2>
+  <div class="table-wrap"><table><thead><tr><th>Run</th><th>Deposit</th><th>Started</th><th>State</th></tr></thead><tbody>
+    {% for j in recent_jobs %}<tr><td><a class="rowlink mono" href="/jobs/{{ j.id }}">{{ j.id }}</a></td><td class="mono">{{ j.fd_number }}</td><td class="small">{{ when(j.started_at) }}</td><td class="small">{{ j.state }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}

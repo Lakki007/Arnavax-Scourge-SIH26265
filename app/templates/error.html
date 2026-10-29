@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block main %}
+<div style="max-width:620px;margin:8vh auto 0">
+  <span class="pill"><span class="tag">{{ code }}</span>{% if code == 403 %}Not allowed{% elif code == 404 %}Not found{% elif code == 409 %}Not possible right now{% elif code == 422 %}Check the input{% elif code == 429 %}Busy{% else %}Something failed{% endif %}</span>
+  <h1 style="margin-top:18px">{{ message }}</h1>
+  <div class="actions" style="margin-top:28px">
+    <button class="btn btn-solid" type="button" onclick="history.back()">Go back</button>
+    <a class="btn btn-ghost" href="{{ '/register' if s and s.role == 'officer' else ('/portal' if s else '/') }}">{{ 'Register' if s and s.role == 'officer' else ('My deposits' if s else 'Home') }}</a>
+  </div>
+</div>
+{% endblock %}

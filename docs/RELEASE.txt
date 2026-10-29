@@ -1,0 +1,9 @@
+Scourge v1.0.0-rc1
+Built: 29 Oct 2026
+TLSNotary commit: eb19c8253abb3872854fb6528a756c54ba61acf9
+Binaries (bin/SHA256SUMS):
+cc1e1a60fff1db74c10b324667907bd86cd19fe36eb58c665ed007800f962fee  scourge_mockbank
+77d648457e6be31d90a94867582f4a79ad2b68461c70106622f6ddc0d155bf1e  scourge_prove
+0f810f03304f423dcd205e69d3327b92366508304a0670801ec4f87041fcdfca  scourge_verifierd
+The zip checksum is published alongside the zip (a file cannot contain its own hash).
+Rollback target: the previous release directory (rehearsed v0-phase6 <-> v1.0.0-rc1).
