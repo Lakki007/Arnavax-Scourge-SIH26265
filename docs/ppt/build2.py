@@ -316,7 +316,7 @@ s4 = S[3]; frame(s4)
 title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
-         ("FaGlobe", SKY, "13 / 16", "real TLS sessions, 6 Indian banks", "public pages, not FD pages"),
+         ("FaGlobe", SKY, "SBI live", "live split-key session, SBI API", "HTTP 200 in 1.0 s · 30 Oct 2026"),
          ("FaVial", MINT, "181 / 181", "automated tests pass", "incl. attack, forgery, 2FA, vault tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
@@ -353,7 +353,7 @@ for r_, s_ in risks:
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
 tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("ROADMAP  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("1 Live proof on a real bank's FD page  →  2 Standard FDR-pledge schema for all banks  →  3 Pilot with an AICTE regional office  →  4 Bank confirmation API as banks onboard; e-BG for new deposits", {"s": 10.5, "c": WHITE})]],
+   ("1 FD-page proof at SBI (live SBI session already done)  →  2 Standard FDR-pledge schema for all banks  →  3 Pilot with an AICTE regional office  →  4 Bank confirmation API as banks onboard; e-BG for new deposits", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 5  IMPACT
@@ -473,12 +473,12 @@ for i, (f_, vals) in enumerate(feat, 1):
     cell(tb_.cell(i, 0), f_, SOFT, INK, 9, align=PP_ALIGN.LEFT)
     for j, v in enumerate(vals, 1):
         if v == "n":
-            cell(tb_.cell(i, j), "Next step", VIO_T, VIO, 8.5)
+            cell(tb_.cell(i, j), "SBI session; FD next", VIO_T, VIO, 8)
         else:
             cell(tb_.cell(i, j), v, VIO_T if j == 5 else WHITE, MINT if v == "✓" else CORAL if v == "✕" else AMBER, 15)
     tb_.rows[i].height = Inches(0.62)
 tb_.rows[0].height = Inches(0.62)
-tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  A live real-bank proof is the next roadmap step (slide 4).", {"s": 9.5, "i": True, "c": GREY})]])
+tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with SBI's API done (30 Oct 2026); FD-page proof is roadmap step 1.", {"s": 9.5, "i": True, "c": GREY})]])
 
 for sl in prs.slides:
     for sh in sl.shapes:
