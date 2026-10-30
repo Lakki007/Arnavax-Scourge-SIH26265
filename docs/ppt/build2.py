@@ -204,9 +204,9 @@ blocks = [
     ("FaKey", VIO, "Detailed explanation of the proposed solution",
      [[("AICTE sends a ", {}), ("single-use challenge", {"b": True}), (" for one FDR. The institution logs into its own net banking inside one TLS session whose keys are ", {}), ("split with AICTE's verifier", {"b": True}), (" (MPC-TLS). Password, OTP, PAN and other accounts never leave the institution.", {})]]),
     ("FaMagnifyingGlass", MINT, "How it addresses the problem",
-     [[("Paper is checked once and trusted for 10 years. Scourge ", {}), ("re-checks the bank any time and before every release", {"b": True}), (": a loan, closure or fake FDR shows up as a ", {}), ("Discrepancy", {"b": True, "c": CORAL_D}), (".", {})]]),
+     [[("Paper is checked once and trusted for 10 years. Scourge ", {}), ("re-checks the bank any time and before every release", {"b": True}), (": a loan, early encashment, missing pledge (lien) or fake FDR shows up as a ", {}), ("Discrepancy", {"b": True, "c": CORAL_D}), (".", {})]]),
     ("FaShieldHalved", CORAL, "Innovation and uniqueness of the solution",
-     [[("No bank API, no agreement, no AA licence", {"b": True}), (" needed. The split key means the institution cannot edit what the bank said; fake banks and replayed proofs are rejected; it covers the existing FDR book from day one.", {})]]),
+     [[("Works on every bank's existing net-banking page, and API-ready", {"b": True}), (": no bank integration or AA licence needed today; a bank confirmation API plugs into the same verifier. Split key: the institution cannot edit what the bank said; fake banks and replays are rejected.", {})]]),
 ]
 y = 2.32
 for ic, col, head, body in blocks:
@@ -232,7 +232,7 @@ life = [("1  FILE", VIO, "Institution files online; renewals linked"),
         ("2  PROVE", SKY, "Bank-session proof on AICTE's challenge"),
         ("3  MONITOR", AMBER, "Maturity alerts; re-check every 30 days"),
         ("4  DECIDE", CORAL, "Verdict + evidence; hash-chained audit"),
-        ("5  RELEASE", MINT, "Two-officer approval, fresh bank proof")]
+        ("5  PLEDGE RELEASE", MINT, "Two-officer approval; release letter to bank")]
 lw5 = (CW - 4 * 0.22) / 5
 for i, (h_, col, t_) in enumerate(life):
     x = L + i * (lw5 + 0.22)
@@ -353,7 +353,7 @@ for r_, s_ in risks:
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
 tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("ROADMAP  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("1 Live proof on a real bank's FD page  →  2 Bank coverage schemas  →  3 Pilot with an AICTE regional office  →  4 AICTE circular: e-BG for new deposits, Scourge for the existing book", {"s": 10.5, "c": WHITE})]],
+   ("1 Live proof on a real bank's FD page  →  2 Standard FDR-pledge schema for all banks  →  3 Pilot with an AICTE regional office  →  4 Bank confirmation API as banks onboard; e-BG for new deposits", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 5  IMPACT
@@ -378,7 +378,7 @@ pill(s5, L + lw_ + gap_, 3.42, lw_, 0.36, "WITH SCOURGE", MINT, size=10.5, font=
 pairs = [("Branch letter or uploaded screenshot", "The bank's own server, proven"),
          ("Checked once, trusted for 10 years", "Re-checked any time, before every release"),
          ("Weeks per confirmation", "Under a second per proof (synthetic bank)"),
-         ("Hidden loans found at release, or never", "Flagged as a Discrepancy; two-officer release")]
+         ("Hidden loans found at release, or never", "Pledge checked at the bank; two-officer release")]
 py = 3.88
 for a_, b2 in pairs:
     rect(s5, L, py, lw_, 0.5, fill=CORAL_T, r=0.2)
