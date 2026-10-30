@@ -171,11 +171,11 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 
 | Stage | In the prototype |
 | --- | --- |
-| **1 File** | Institutions file their own FDRs (`/fdrs/new`); officers can enter paper submissions |
+| **1 File** | Institutions file their own FDRs (`/fdrs/new`); officers can enter paper submissions; a renewed FDR is linked to the one it replaces, and the old one counts as renewed once the bank confirms the new one |
 | **2 Prove** | Single-use challenge → bank-session proof → verdict with byte-level evidence |
 | **3 Monitor** | Register "Needs attention" panel: bank contradicts paper, matured but not released, maturing within 90 days, re-check due (no confirmation in the last 30 days) |
-| **4 Decide** | Officer accept / escalate; audit log with CSV export; evidence exportable as JSON |
-| **5 Release** | Blocked unless an accepted bank confirmation is less than 30 days old |
+| **4 Decide** | Officer accept / escalate; evidence exportable as JSON; audit log that is append-only **and hash-chained** (each entry carries the SHA-256 of the previous one; the Audit page re-verifies the whole chain and pinpoints the first altered entry; CSV export includes the hashes) |
+| **5 Release** | **Maker-checker:** one officer proposes, a different officer approves; approval is blocked unless an accepted bank confirmation is less than 30 days old; approval issues a release letter carrying its audit-entry hash |
 
 ---
 
@@ -187,7 +187,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Data per proof | about 39 MB between prover and verifier | Measured |
 | Bad deposits caught | 119 / 119 (an upload-and-approve baseline approved all 119) | Measured, 180 fresh synthetic deposits |
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
-| Automated tests | 102 pass, 2 deployment-only skipped | Local run |
+| Automated tests | 106 pass, 2 deployment-only skipped | Local run |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages, **not** logged-in FD pages |
 | Software licence cost | ₹0 | Estimate |
 
@@ -197,7 +197,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 
 ## 9. Why it is different
 
-Of about 27 public SIH26265 builds we found (29 Oct 2026), none checks the bank's own data without the bank's cooperation.
+Scourge is the only approach in this comparison that uses the bank's own data without needing anything from the bank.
 
 | Approach | Bank's own data | Needs nothing from the bank | Institution cannot forge | Covers existing FDR book |
 | --- | --- | --- | --- | --- |

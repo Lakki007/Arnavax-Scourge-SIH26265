@@ -6,7 +6,7 @@
 - **Full idea, solution and workflow (start here):** [`docs/IDEA.md`](docs/IDEA.md)
 - Code: https://github.com/Lakki007/Arnavax-Scourge-SIH26265
 - Idea deck: `docs/ppt/Scourge_SIH26265_Idea.pdf`
-- Lifecycle in the portal: file FDR → bank-session proof → monitor (maturity, re-checks) → officer decision → gated release
+- Lifecycle in the portal: file FDR (renewals linked) → bank-session proof → monitor (maturity, re-checks) → officer decision (hash-chained audit) → two-officer release with release letter
 
 An institution proves, from its own net-banking session, what the bank's server says about an FDR. AICTE's separate verifier checks the MPC-TLS proof (TLSNotary) and sees only that deposit's record. The app compares the proven fields with the register and lets an officer accept, escalate or release.
 

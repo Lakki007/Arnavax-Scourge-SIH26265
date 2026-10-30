@@ -202,11 +202,11 @@ tx(s2, L, 1.62, 7.1, 0.62, [[("An institution proves what its ", {"s": 15, "f": 
    ("only that record.", {"s": 15, "f": H, "b": True, "c": VIO})]], lsp=1.0)
 blocks = [
     ("FaKey", VIO, "Detailed explanation of the proposed solution",
-     [[("AICTE sends a ", {}), ("single-use challenge", {"b": True}), (" for one FDR. The institution logs into its own net banking and proves the deposit page inside one TLS session whose keys are ", {}), ("split with AICTE's verifier", {"b": True}), (" (MPC-TLS).", {})]]),
+     [[("AICTE sends a ", {}), ("single-use challenge", {"b": True}), (" for one FDR. The institution logs into its own net banking inside one TLS session whose keys are ", {}), ("split with AICTE's verifier", {"b": True}), (" (MPC-TLS). Password, OTP, PAN and other accounts never leave the institution.", {})]]),
     ("FaMagnifyingGlass", MINT, "How it addresses the problem",
      [[("Paper is checked once and trusted for 10 years. Scourge ", {}), ("re-checks the bank any time and before every release", {"b": True}), (": a loan, closure or fake FDR shows up as a ", {}), ("Discrepancy", {"b": True, "c": CORAL_D}), (".", {})]]),
     ("FaShieldHalved", CORAL, "Innovation and uniqueness of the solution",
-     [[("No bank API, no agreement, no AA licence", {"b": True}), (". The institution cannot forge it (a fake bank is rejected) and AICTE never sees the PAN or other accounts. None of the ~27 public SIH26265 builds we found does this.", {})]]),
+     [[("No bank API, no agreement, no AA licence", {"b": True}), (" needed. The split key means the institution cannot edit what the bank said; fake banks and replayed proofs are rejected; it covers the existing FDR book from day one.", {})]]),
 ]
 y = 2.32
 for ic, col, head, body in blocks:
@@ -228,11 +228,11 @@ tx(s2, hx + 2.5, yb, hw - 2.8, 0.34, [[("Every value traces to the bank's own by
 
 # lifecycle strip: the whole portal, not only verification
 pointer(s2, L, 5.47, CW, "The complete FDR lifecycle in one portal (all five stages run in the prototype)", color=INK, size=11.5)
-life = [("1  FILE", VIO, "Institution files its FDR claim online"),
+life = [("1  FILE", VIO, "Institution files online; renewals linked"),
         ("2  PROVE", SKY, "Bank-session proof on AICTE's challenge"),
         ("3  MONITOR", AMBER, "Maturity alerts; re-check every 30 days"),
-        ("4  DECIDE", CORAL, "Officer accepts or escalates; audit log"),
-        ("5  RELEASE", MINT, "Only with a fresh bank confirmation")]
+        ("4  DECIDE", CORAL, "Verdict + evidence; hash-chained audit"),
+        ("5  RELEASE", MINT, "Two-officer approval, fresh bank proof")]
 lw5 = (CW - 4 * 0.22) / 5
 for i, (h_, col, t_) in enumerate(life):
     x = L + i * (lw5 + 0.22)
@@ -252,7 +252,7 @@ s3 = S[2]; frame(s3)
 title(s3, [("TECHNICAL APPROACH", INK)], 30)
 pointer(s3, L, 1.22, 8, "Technologies to be used")
 stack = [("FaFingerprint", VIO, "Proof layer", "TLSNotary MPC-TLS · Rust", "Selective disclosure · rustls"),
-         ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "Separate verifier process"),
+         ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "Hash-chained audit · verifier"),
          ("FaCode", MINT, "Frontend", "Server-rendered HTML · JS", "Live 3-party proof view"),
          ("FaVial", AMBER, "Ops & QA", "nginx TLS · systemd", "pytest · Playwright · audits")]
 cw4 = (CW - 3 * 0.2) / 4
@@ -317,7 +317,7 @@ title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
          ("FaGlobe", SKY, "13 / 16", "real TLS sessions, 6 Indian banks", "public pages, not FD pages"),
-         ("FaVial", MINT, "102 / 102", "automated tests pass", "local run · 2 deploy-only skipped"),
+         ("FaVial", MINT, "106 / 106", "automated tests pass", "incl. attack + two-officer tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
@@ -339,7 +339,7 @@ pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
 risks = [("Bank page hides liens, or bytes are withheld", "Insufficient evidence, never Verified; release stays blocked"),
          ("Fake bank site or a replayed old proof", "Rejected: bank certificate + single-use, 15-min challenge"),
-         ("Fraud inside the bank's own records", "Out of scope by design: Scourge trusts the bank's server, not paper"),
+         ("Proof of a different FD, or an edited screen", "Rejected / no effect: FD bound to challenge; proof covers bank bytes"),
          ("Bank needs browser-bound session / TLS 1.3", "Browser-extension prover; bank marked unsupported until then")]
 ry = 4.13
 for r_, s_ in risks:
@@ -352,8 +352,8 @@ for r_, s_ in risks:
     tx(s4, 7.38, ry, R - 7.48, 0.44, [[(s_, {"s": 10.5, "c": INK})]], anchor=MSO_ANCHOR.MIDDLE)
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
-tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("NEXT GATE  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("Prove a logged-in FD page at a real bank with our own account. Pass on one bank = launch there. Bank terms and AICTE acceptance go to legal review via the SPOC.", {"s": 10.5, "c": WHITE})]],
+tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("ROADMAP  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
+   ("1 Live proof on a real bank's FD page  →  2 Bank coverage schemas  →  3 Pilot with an AICTE regional office  →  4 AICTE circular: e-BG for new deposits, Scourge for the existing book", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 5  IMPACT
@@ -378,7 +378,7 @@ pill(s5, L + lw_ + gap_, 3.42, lw_, 0.36, "WITH SCOURGE", MINT, size=10.5, font=
 pairs = [("Branch letter or uploaded screenshot", "The bank's own server, proven"),
          ("Checked once, trusted for 10 years", "Re-checked any time, before every release"),
          ("Weeks per confirmation", "Under a second per proof (synthetic bank)"),
-         ("Hidden loans found at release, or never", "A Discrepancy, with the bank's bytes")]
+         ("Hidden loans found at release, or never", "Flagged as a Discrepancy; two-officer release")]
 py = 3.88
 for a_, b2 in pairs:
     rect(s5, L, py, lw_, 0.5, fill=CORAL_T, r=0.2)
@@ -404,7 +404,7 @@ for big, lab, col in res:
 ben = [("FaPeopleGroup", MINT, "Social", "students' deposits stay intact"),
        ("FaCoins", SKY, "Economic", "stops loss before release"),
        ("FaLeaf", RGBColor(0x16, 0xA3, 0x4A), "Environmental", "no paper letters or couriers"),
-       ("FaScaleBalanced", VIO, "Governance", "dated, exportable evidence")]
+       ("FaScaleBalanced", VIO, "Governance", "hash-chained, exportable audit")]
 bw = (CW - 3 * 0.2) / 4
 for i, (ic, col, h_, t_) in enumerate(ben):
     x = L + i * (bw + 0.2)
@@ -441,7 +441,7 @@ q = rect(s6, L + 0.2, 5.55, 1.08, 1.08, fill=WHITE, r=0.08)
 qp6 = s6.shapes.add_picture(IMG + "qr_dark.png", Inches(L + 0.25), Inches(5.6), Inches(0.98), Inches(0.98)); qp6.click_action.hyperlink.address = DEMO_HREF
 tx(s6, L + 1.45, 5.5, 4.7, 1.2, [[("PROJECT RESOURCES", {"f": H, "b": True, "s": 11, "c": MINT, "after": 3})],
    [("Demo video (90 s): ", {"b": True, "s": 9.5, "c": WHITE}), (DEMO_URL, {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
-   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 102 / 102 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
+   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 106 / 106 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
    [("Code + evidence: ", {"b": True, "s": 9.5, "c": WHITE}), ("github.com/Lakki007/Arnavax-Scourge-SIH26265", {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # comparison table (hero)
@@ -473,12 +473,12 @@ for i, (f_, vals) in enumerate(feat, 1):
     cell(tb_.cell(i, 0), f_, SOFT, INK, 9, align=PP_ALIGN.LEFT)
     for j, v in enumerate(vals, 1):
         if v == "n":
-            cell(tb_.cell(i, j), "Next gate", VIO_T, VIO, 8.5)
+            cell(tb_.cell(i, j), "Next step", VIO_T, VIO, 8.5)
         else:
             cell(tb_.cell(i, j), v, VIO_T if j == 5 else WHITE, MINT if v == "✓" else CORAL if v == "✕" else AMBER, 15)
     tb_.rows[i].height = Inches(0.62)
 tb_.rows[0].height = Inches(0.62)
-tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank official can still forge a letter.  Real-bank proof is our next gate (slide 4).", {"s": 9.5, "i": True, "c": GREY})]])
+tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  A live real-bank proof is the next roadmap step (slide 4).", {"s": 9.5, "i": True, "c": GREY})]])
 
 for sl in prs.slides:
     for sh in sl.shapes:
