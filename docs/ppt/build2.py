@@ -10,7 +10,7 @@ from lxml import etree
 
 T = "/tmp/claude-0/ppt/"
 IMG, ICO = T + "img/", T + "icons/"
-VIDEO = T + "video/scourge_demo_90s.mp4"
+VIDEO = T + "video/scourge_demo_silent.mp4"
 POSTER = T + "video/poster.png"
 DEMO_URL = "youtu.be/8HoplhFOGCg"
 DEMO_HREF = "https://youtu.be/8HoplhFOGCg"
@@ -301,22 +301,22 @@ for lab, col in [("Verified", MINT), ("Discrepancy", CORAL), ("Insufficient evid
 # hero: video card
 vx, vy, vw, vh = 9.05, 2.85, R - 9.05, 3.92
 rect(s3, vx, vy, vw, vh, fill=INK, r=0.06)
-tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE 90-SECOND DEMO", {"f": H, "b": True, "s": 11, "c": MINT})]])
+tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE DEMO (100 s)", {"f": H, "b": True, "s": 11, "c": MINT})]])
 mw = vw - 0.5; mh = mw * 9 / 16
 mv = s3.shapes.add_movie(VIDEO, Inches(vx + 0.25), Inches(vy + 0.6), Inches(mw), Inches(mh), poster_frame_image=POSTER, mime_type="video/mp4")
-mv.name = "Demo video (90 s)"
+mv.name = "Demo video"
 qy = vy + 0.6 + mh + 0.2
 qr = rect(s3, vx + 0.25, qy, 1.05, 1.05, fill=WHITE, r=0.08)
 qp = s3.shapes.add_picture(IMG + "qr_dark.png", Inches(vx + 0.3), Inches(qy + 0.05), Inches(0.95), Inches(0.95)); qp.click_action.hyperlink.address = DEMO_HREF
 tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Click to play here, or scan / click the QR for YouTube", {"s": 9.5, "b": True, "c": WHITE, "after": 3})],
-                                        [("Real proofs on a synthetic bank", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
+                                        [("Synthetic bank + live SBI session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 4  FEASIBILITY
 s4 = S[3]; frame(s4)
 title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
-         ("FaGlobe", SKY, "13 / 16", "real TLS sessions, 6 Indian banks", "public pages, not FD pages"),
+         ("FaGlobe", SKY, "SBI live", "live split-key session, SBI API", "HTTP 200 in 1.0 s · 30 Oct 2026"),
          ("FaVial", MINT, "181 / 181", "automated tests pass", "incl. attack, forgery, 2FA, vault tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
@@ -326,14 +326,12 @@ for i, (ic, col, big, lab, note) in enumerate(tiles):
     tx(s4, x + 0.85, 1.74, cw4 - 0.95, 0.62, [[(big, {"f": H, "b": True, "s": 26, "c": INK})]], anchor=MSO_ANCHOR.MIDDLE)
     tx(s4, x + 0.2, 2.42, cw4 - 0.35, 0.5, [[(lab, {"s": 10.5, "b": True, "c": INK})], [(note, {"s": 9.5, "c": GREY, "i": True})]])
 
-feas = [("Technical", "Open-source TLSNotary (MIT/Apache-2.0); runs on one small server"),
-        ("Operational", "Institution uses its own login; no bank integration needed"),
-        ("Viability", "Adopted by an AICTE circular; covers the existing FDR book")]
-fw = (CW - 2 * 0.2) / 3
-for i, (h_, t_) in enumerate(feas):
-    x = L + i * (fw + 0.2)
-    icon(s4, "FaCheck", x, 3.13, 0.32, MINT, pad=0.22)
-    tx(s4, x + 0.42, 3.07, fw - 0.45, 0.5, [[(h_ + ": ", {"b": True, "c": MINT_D, "s": 10.5}), (t_, {"s": 10.5, "c": GREY})]], lsp=1.0)
+# live real-bank run (replaces the generic feasibility ticks with evidence)
+rect(s4, L, 3.06, CW, 0.56, fill=INK, r=0.2)
+icon(s4, "FaBuildingColumns", L + 0.14, 3.15, 0.38, MINT, pad=0.22)
+tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("SBI · 30 Oct 2026 · own account", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":1.0}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
+   [("Split-key session with SBI's production net-banking API; cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
@@ -353,7 +351,7 @@ for r_, s_ in risks:
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
 tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("ROADMAP  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("1 Live proof on a real bank's FD page  →  2 Standard FDR-pledge schema for all banks  →  3 Pilot with an AICTE regional office  →  4 Bank confirmation API as banks onboard; e-BG for new deposits", {"s": 10.5, "c": WHITE})]],
+   ("1 FD-page proof at SBI (live SBI session already done)  →  2 Standard FDR-pledge schema for all banks  →  3 Pilot with an AICTE regional office  →  4 Bank confirmation API as banks onboard; e-BG for new deposits", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 5  IMPACT
@@ -473,12 +471,12 @@ for i, (f_, vals) in enumerate(feat, 1):
     cell(tb_.cell(i, 0), f_, SOFT, INK, 9, align=PP_ALIGN.LEFT)
     for j, v in enumerate(vals, 1):
         if v == "n":
-            cell(tb_.cell(i, j), "Next step", VIO_T, VIO, 8.5)
+            cell(tb_.cell(i, j), "SBI session; FD next", VIO_T, VIO, 8)
         else:
             cell(tb_.cell(i, j), v, VIO_T if j == 5 else WHITE, MINT if v == "✓" else CORAL if v == "✕" else AMBER, 15)
     tb_.rows[i].height = Inches(0.62)
 tb_.rows[0].height = Inches(0.62)
-tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  A live real-bank proof is the next roadmap step (slide 4).", {"s": 9.5, "i": True, "c": GREY})]])
+tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with SBI's API done (30 Oct 2026); FD-page proof is roadmap step 1.", {"s": 9.5, "i": True, "c": GREY})]])
 
 for sl in prs.slides:
     for sh in sl.shapes:
