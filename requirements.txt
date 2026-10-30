@@ -1,4 +1,4 @@
-# Runtime (pinned to the versions the 186-test suite passed on, 30 Oct 2026)
+# Runtime (pinned to the versions the 243-test suite passed on, 30 Oct 2026)
 fastapi==0.162.0
 starlette==1.7.0
 uvicorn==0.54.0

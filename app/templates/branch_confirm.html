@@ -15,7 +15,12 @@
     <div class="field"><label for="b-balance">Current balance (₹)</label><input id="b-balance" name="balance" placeholder="e.g. 2500000.00"></div>
     <div class="field"><label for="b-maturity">Maturity date</label><input id="b-maturity" name="maturity" placeholder="YYYY-MM-DD"></div>
     <div class="field"><label for="b-holders">Holders</label><input id="b-holders" name="holders" placeholder="e.g. TRUST NAME / MEMBER SECRETARY AICTE"></div>
-    <div class="field"><label for="b-lien">Lien / pledge marked</label><input id="b-lien" name="lien" placeholder="e.g. AICTE NEW DELHI (SECURITY DEPOSIT) or LOAN …"></div>
+    <fieldset class="field"><legend>Lien / pledge on this deposit (from your core banking system)</legend>
+      <label><input type="radio" name="lien_choice" value="aicte"> Lien marked in favour of Member Secretary, AICTE</label>
+      <label><input type="radio" name="lien_choice" value="none"> No lien marked</label>
+      <label><input type="radio" name="lien_choice" value="loan"> Loan or overdraft against the deposit, amount ₹ <input name="loan_amount" inputmode="decimal" style="width:10em"></label>
+      <label><input type="radio" name="lien_choice" value="" checked> Cannot confirm</label>
+    </fieldset>
     <div class="field"><label for="b-officer">Confirming officer (name, designation)</label><input id="b-officer" name="officer_name" required></div>
     <div class="field"><label for="b-code">One-time code (sent separately)</label><input id="b-code" name="code" inputmode="numeric" autocomplete="one-time-code" required></div>
     <button class="btn btn-solid">Submit confirmation</button>

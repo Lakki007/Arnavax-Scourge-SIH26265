@@ -179,6 +179,15 @@ def event(actor: str, kind: str, fdr_id=None, **detail):
           (at, actor, kind, fdr_id, dj, prev, chain_hash(prev, at, actor, kind, fdr_id, dj)))
 
 
+def event_in(c, actor: str, kind: str, fdr_id=None, **detail):
+    """Append an audit entry inside the caller's open transaction (it commits or rolls back with the change it describes)."""
+    last = c.execute("SELECT hash FROM events ORDER BY id DESC LIMIT 1").fetchone()
+    prev = (last["hash"] if last and last["hash"] else GENESIS)
+    at, dj = time.time(), json.dumps(detail, default=str)
+    c.execute("INSERT INTO events(at,actor,kind,fdr_id,detail_json,prev_hash,hash) VALUES(?,?,?,?,?,?,?)",
+              (at, actor, kind, fdr_id, dj, prev, chain_hash(prev, at, actor, kind, fdr_id, dj)))
+
+
 def verify_chain():
     """Recompute every link. Returns {ok, count, head, broken_at, problem}."""
     prev, n, head = GENESIS, 0, GENESIS

@@ -40,14 +40,6 @@
       "active_values": [
         "ACTIVE"
       ],
-      "lien_ok_contains": [
-        "AICTE"
-      ],
-      "lien_bad_contains": [
-        "LOAN",
-        "OVERDRAFT"
-      ],
-      "holder_must_contain": "AICTE",
       "inactive_values": [
         "CLOSED",
         "MATURED",
@@ -58,7 +50,29 @@
         "PAID",
         "LIQUIDATED",
         "INACTIVE"
-      ]
+      ],
+      "lien_rules": {
+        "version": "mockbank-lien/2026-10-31",
+        "_note": "Exact, bank-specific meanings. Text is upper-cased and whitespace-collapsed, then compared WHOLE. Anything not listed is unknown (never a confirmation).",
+        "in_favour_of_aicte": [
+          "AICTE NEW DELHI (SECURITY DEPOSIT)",
+          "LIEN MARKED IN FAVOUR OF MEMBER SECRETARY AICTE"
+        ],
+        "encumbrance_patterns": [
+          "LOAN [0-9]+(\\.[0-9]{1,2})? AGAINST DEPOSIT",
+          "OVERDRAFT [0-9]+(\\.[0-9]{1,2})? AGAINST DEPOSIT"
+        ],
+        "no_lien_values": [
+          "NONE",
+          "NIL",
+          "NO LIEN",
+          "NO LIEN IN FAVOUR OF AICTE",
+          "AICTE LIEN REMOVED",
+          "LIEN RELEASED",
+          "LIEN MARKED OFF"
+        ]
+      },
+      "holder_required": "MEMBER SECRETARY AICTE"
     }
   },
   "max_sent": 4096,

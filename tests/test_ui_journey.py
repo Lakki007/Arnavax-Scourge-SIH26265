@@ -85,11 +85,22 @@ def test_full_journey(page):
     page.click("dialog[open] button:has-text('Propose release')")
     expect(page.locator(".page-head .st")).to_have_text("Release proposed")
     expect(page.locator("button:has-text('Approve release')")).to_have_count(0)   # maker cannot approve
-    for dept in ("PGRC", "VIG", "FIN"):
-        page.select_option("#clr-dept", dept)
-        page.click("#release button:has-text('Clear')")
+    memo = {"name": "memo.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"}
+    for who in ("PG-01", "VG-01", "FN-01"):                                       # each department decides for itself
+        page.click(f"button:has-text('reviewer {who}')")
+        page.fill("#clr-note", "Register checked: nothing pending")
+        page.set_input_files("#clr-memo", memo)
+        page.click("#clr-form button:has-text('Clear')")
+        expect(page.locator("#clr-form")).to_have_count(0)
+        signin(page, "officer"); page.goto(B + "/fdrs/FDR-001")
     page.click("button:has-text('Switch to officer RB-02 to approve')")
     page.click("button:has-text('Approve release')")
+    expect(page.locator(".page-head .st")).to_have_text("Release instruction issued")       # signed, not yet executed
+    page.click("button:has-text('Switch to completion recorder RB-04')")
+    letter_no = page.locator("#completion b").first.inner_text()
+    page.fill("#c-letter", letter_no); page.fill("#c-fd", "FD-0000123456"); page.fill("#c-amt", "1000000.00"); page.fill("#c-ref", "SBN/ACK/2026/0091")
+    page.set_input_files("#c-ack", {"name": "ack.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4\n% bank ack 0091\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"})
+    page.click("button:has-text('Record completion')")
     expect(page.locator(".page-head .st")).to_have_text("Released")
     page.click("a:has-text('Open the release letter')")
     expect(page.locator("h1")).to_contain_text("Release of security deposit")
@@ -184,9 +195,9 @@ def test_reset_and_repeat(page):
     reset(page)
     expect(page.locator("tbody .st")).to_have_text(["Submitted by institution"] * 4)
     page.goto(B + "/audit")
-    # the reset wipes the log; its own entry is the first, then the 5 demo accounts, then the daily reminder check
+    # the reset wipes the log; its own entry is the first, then the 9 demo accounts, then the daily reminder check
     expect(page.locator("tbody tr").last).to_contain_text("demo reset")
-    expect(page.locator("tbody tr")).to_have_count(7)
+    expect(page.locator("tbody tr")).to_have_count(11)
     assert not page.errors, page.errors
 
 

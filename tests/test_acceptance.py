@@ -51,12 +51,12 @@ def challenge(off, fdr):
     return db().execute("SELECT id, token, institution_id FROM challenges WHERE fdr_id=? ORDER BY issued_at DESC", (fdr,)).fetchone()
 
 
-def bank(off, fdr, behaviour):
-    assert off.post("/mockbank/behaviour", fd_number=FD[fdr], behaviour=behaviour).status_code == 303
+def bank(off, fdr, behaviour, lien_text=""):
+    assert off.post("/mockbank/behaviour", fd_number=FD[fdr], behaviour=behaviour, lien_text=lien_text).status_code == 303
 
 
-def prove(off, fdr, behaviour="active", inst="INST-42", **mode):
-    bank(off, fdr, behaviour)
+def prove(off, fdr, behaviour="active", inst="INST-42", lien_text="", **mode):
+    bank(off, fdr, behaviour, lien_text)
     cid, _, _ = challenge(off, fdr)
     s = S(f"institution:{inst}")
     r = s.post(f"/challenges/{cid}/prove", **mode)
@@ -518,9 +518,19 @@ def _confirmed(off, fdr="FDR-001"):
     return eid
 
 
-def _clear_all(sess, fdr="FDR-001"):
-    for d in ("PGRC", "VIG", "FIN"):
-        assert sess.post(f"/fdrs/{fdr}/release/clear", dept=d, decision="clear").status_code == 303
+MEMO = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+DEPT_REVIEWER = {"PGRC": "PG-01", "VIG": "VG-01", "FIN": "FN-01"}
+
+
+def _clear(sess, fdr, dept, decision="clear", note="Register checked: nothing pending", memo=MEMO, **extra):
+    files = {"memo": ("memo.pdf", memo, "application/pdf")} if memo else None
+    return sess.c.post(f"/fdrs/{fdr}/release/clear", data={"csrf": sess.csrf, "dept": dept, "decision": decision, "note": note, **extra}, files=files)
+
+
+def _clear_all(sess=None, fdr="FDR-001"):
+    for d, who in DEPT_REVIEWER.items():
+        r = _clear(S(f"officer:{who}"), fdr, d)
+        assert r.status_code == 303, r.text
 
 
 def test_release_needs_two_different_officers(off):
@@ -537,7 +547,9 @@ def test_release_needs_two_different_officers(off):
     assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 409                # departments have not cleared yet
     _clear_all(off)
     assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
-    assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is not None
+    assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is None           # issued, not yet executed
+    assert db().execute("SELECT state FROM release_requests WHERE fdr_id='FDR-001'").fetchone()[0] == "approved"
+    assert "Release instruction issued" in rb2.get("/fdrs/FDR-001").text
     letter = rb2.get("/fdrs/FDR-001/release-letter").text
     assert "AICTE/RB/REL/" in letter and "RB-01" in letter and "RB-02" in letter
     assert inst.get("/fdrs/FDR-001/release-letter").status_code == 200                 # the institution gets its letter
@@ -714,9 +726,10 @@ def test_clearance_objection_blocks_and_second_signer_above_one_crore(off):
     eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
     assert off.post(f"/fdrs/{fid}/decide", action="accept", evidence_id=str(eid)).status_code == 303
     assert off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0200 term completed").status_code == 303
-    assert off.post(f"/fdrs/{fid}/release/clear", dept="VIG", decision="object", note="short").status_code == 422
-    assert off.post(f"/fdrs/{fid}/release/clear", dept="VIG", decision="object", note="Vigilance case pending against trust").status_code == 303
-    off.post(f"/fdrs/{fid}/release/clear", dept="PGRC", decision="clear"); off.post(f"/fdrs/{fid}/release/clear", dept="FIN", decision="clear")
+    vg = S("officer:VG-01")
+    assert _clear(vg, fid, "VIG", "object", note="short").status_code == 422
+    assert _clear(vg, fid, "VIG", "object", note="Vigilance case pending against trust").status_code == 303
+    _clear(S("officer:PG-01"), fid, "PGRC"); _clear(S("officer:FN-01"), fid, "FIN")
     rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
     assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                # objection blocks
     rb2.post(f"/fdrs/{fid}/release/reject", note="Vigilance objection; resubmit later")
@@ -727,7 +740,7 @@ def test_clearance_objection_blocks_and_second_signer_above_one_crore(off):
     assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
     assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                # same officer cannot sign twice
     assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303
-    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is not None
+    assert db().execute("SELECT state FROM release_requests WHERE fdr_id=? ORDER BY id DESC", (fid,)).fetchone()[0] == "approved"
     body = rb3.get(f"/fdrs/{fid}/release-letter.json").json()
     assert body["payload"]["signed_by"] == ["RB-02", "RB-03"] and body["payload"]["clearances"] == ["FIN", "PGRC", "VIG"]
 
@@ -925,7 +938,7 @@ def test_signature_withdrawn_when_case_changes_after_signing(off):
     assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303                # counts as the first valid signature now
     assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
     assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # RB-02 signs again, on the current case
-    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is not None
+    assert db().execute("SELECT state FROM release_requests WHERE fdr_id=? ORDER BY id DESC", (fid,)).fetchone()[0] == "approved"
     body = rb2.get(f"/fdrs/{fid}/release-letter.json").json()
     assert body["payload"]["signed_by"] == ["RB-03", "RB-02"] and len(body["payload"]["case_fingerprint"]) == 64
 
@@ -958,3 +971,235 @@ def test_email_alerts_delivered_over_smtp_when_configured(off):
     r = off.get("/notifications")
     assert "once SMTP is configured" in r.text
     assert db().execute("SELECT count(*) FROM notifications WHERE channel='email' AND status='sent'").fetchone()[0] == 0
+
+
+
+# ---------------------------------------------------------------- V-series through the REAL prover/verifier (review contract)
+@pytest.mark.parametrize("lien,decision", [
+    ("AICTE NEW DELHI (SECURITY DEPOSIT)", "verified"),                 # V01 exact listed positive
+    ("NO LIEN IN FAVOUR OF AICTE", "discrepancy"),                      # V02 listed negative
+    ("AICTE LIEN REMOVED", "discrepancy"),                              # V03 listed negative
+    ("AICTE LIEN CANCELLED ON 12-10-2026", "insufficient_evidence"),    # V06 unseen negation: never verified
+    ("AICTE", "insufficient_evidence"),                                 # V06 bare mention is not a lien
+    ("PLEDGED (SEE BRANCH)", "insufficient_evidence"),                  # V06 unknown wording
+    ("LOAN 50000.00 AGAINST DEPOSIT", "discrepancy"),                   # V05 listed encumbrance
+])
+def test_lien_semantics_through_real_proofs(off, lien, decision):
+    j, cid = prove(off, "FDR-001", "custom_lien", lien_text=lien)
+    d, reason, facts, match = evidence(cid)
+    assert facts["fields"]["lien"]["state"] == "proven" and facts["fields"]["lien"]["value"] == lien   # authentic bytes...
+    assert d == decision, (lien, d, match.get("lien"))                                                 # ...read conservatively
+
+
+def test_custom_lien_input_is_validated(off):
+    assert off.post("/mockbank/behaviour", fd_number=FD["FDR-001"], behaviour="custom_lien", lien_text='X" , "status":"ACTIVE').status_code == 422
+    assert off.post("/mockbank/behaviour", fd_number=FD["FDR-001"], behaviour="custom_lien", lien_text="").status_code == 422
+
+
+def test_branch_lien_answer_is_structured(off):
+    j, cid = prove(off, "FDR-001", "login")
+    off.post("/fdrs/FDR-001/branch/request")
+    link, code = _branch_link_and_code()
+    path = link.split("8080", 1)[1]
+    base = {"t": path.split("t=")[1], "code": code, "status": "ACTIVE", "balance": "1000000.00", "maturity": "2031-07-01",
+            "holders": "SYNTHETIC INSTITUTE OF TECHNOLOGY TRUST / MEMBER SECRETARY AICTE", "officer_name": "Branch Manager, Main"}
+    r = httpx.post(B + path.split("?")[0], data=dict(base, lien_choice="none"))
+    assert r.status_code == 200
+    e = db().execute("SELECT decision, facts_json FROM evidence WHERE fdr_id='FDR-001' ORDER BY id DESC").fetchone()
+    assert e[0] == "discrepancy" and json.loads(e[1])["fields"]["lien"]["value"] == "NO LIEN"
+
+
+
+# ---------------------------------------------------------------- P-series: departmental authority (review contract)
+def _proposed(off, fdr="FDR-001"):
+    eid = _confirmed(off, fdr)
+    assert off.post(f"/fdrs/{fdr}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0400 term completed").status_code == 303
+    return eid
+
+
+def test_p01_reviewer_cannot_decide_another_department(off):
+    _proposed(off)
+    fin = S("officer:FN-01")
+    n0 = db().execute("SELECT count(*) FROM events WHERE kind='release_cleared'").fetchone()[0]
+    assert _clear(fin, "FDR-001", "VIG").status_code == 403
+    assert db().execute("SELECT count(*) FROM release_clearances").fetchone()[0] == 0
+    assert db().execute("SELECT count(*) FROM events WHERE kind='release_cleared'").fetchone()[0] == n0
+    assert db().execute("SELECT count(*) FROM events WHERE kind='release_clearance_refused'").fetchone()[0] == 1
+
+
+def test_p02_proposer_and_approvers_cannot_clear(off):
+    _proposed(off)
+    for who in ("RB-01", "RB-02", "RB-03"):
+        for d in DEPT_REVIEWER:
+            assert _clear(S(f"officer:{who}"), "FDR-001", d).status_code == 403
+    assert S("officer:PG-01").post("/fdrs/FDR-001/release/approve").status_code == 403     # reviewers cannot sign
+
+
+def test_p03_clearance_needs_reason_and_memo(off):
+    _proposed(off)
+    pg = S("officer:PG-01")
+    assert _clear(pg, "FDR-001", "PGRC", memo=None).status_code == 422
+    assert _clear(pg, "FDR-001", "PGRC", note="ok").status_code == 422
+    assert _clear(pg, "FDR-001", "PGRC", memo=b"MZ not a pdf").status_code == 422
+    assert _clear(pg, "FDR-001", "PGRC").status_code == 303
+    row = db().execute("SELECT kind, uploaded_by FROM documents WHERE fdr_id='FDR-001'").fetchone()
+    assert row == ("clearance_memo", "officer:PG-01")
+
+
+def test_p04_memo_of_another_case_or_officer_refused(off):
+    _proposed(off)
+    _proposed(off, "FDR-004")
+    pg, vg = S("officer:PG-01"), S("officer:VG-01")
+    assert _clear(pg, "FDR-004", "PGRC").status_code == 303
+    other = db().execute("SELECT id FROM documents WHERE fdr_id='FDR-004'").fetchone()[0]
+    assert _clear(pg, "FDR-001", "PGRC", memo=None, doc_id=str(other)).status_code == 422          # another case's memo
+    up = vg.c.post("/fdrs/FDR-001/documents", data={"csrf": vg.csrf, "kind": "clearance_memo"}, files={"file": ("v.pdf", MEMO, "application/pdf")})
+    assert up.status_code == 303
+    vmemo = db().execute("SELECT id FROM documents WHERE fdr_id='FDR-001' AND uploaded_by='officer:VG-01'").fetchone()[0]
+    assert _clear(pg, "FDR-001", "PGRC", memo=None, doc_id=str(vmemo)).status_code == 422          # someone else's memo
+    assert _clear(vg, "FDR-001", "VIG", memo=None, doc_id=str(vmemo)).status_code == 303           # own memo of this case
+
+
+def test_p05_same_officer_cannot_give_both_signatures(off):
+    off.post("/fdrs/new", institution_id="INST-77", fd_number="FD-0000990005", bank_host="netbanking.mockbank.test",
+             principal="20000000", issue_date="2024-01-01", maturity="2034-01-01")
+    fid = db().execute("SELECT id FROM fdrs WHERE fd_number='FD-0000990005'").fetchone()[0]
+    FD[fid] = "FD-0000990005"
+    off.post("/mockbank/open", fd_number="FD-0000990005")
+    j, cid = prove(off, fid, inst="INST-77")
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    off.post(f"/fdrs/{fid}/decide", action="accept", evidence_id=str(eid))
+    off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0500 term completed")
+    _clear_all(fdr=fid)
+    rb2 = S("officer:RB-02")
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409
+    assert db().execute("SELECT count(*) FROM release_approvals").fetchone()[0] == 1
+
+
+# ---------------------------------------------------------------- G-series: atomic, version-aware approval (review contract)
+def _two_signer_case(off, fd, principal="15000000"):
+    off.post("/fdrs/new", institution_id="INST-77", fd_number=fd, bank_host="netbanking.mockbank.test",
+             principal=principal, issue_date="2024-01-01", maturity="2034-01-01")
+    fid = db().execute("SELECT id FROM fdrs WHERE fd_number=?", (fd,)).fetchone()[0]
+    FD[fid] = fd
+    off.post("/mockbank/open", fd_number=fd)
+    j, cid = prove(off, fid, inst="INST-77")
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    off.post(f"/fdrs/{fid}/decide", action="accept", evidence_id=str(eid))
+    off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0600 term completed")
+    _clear_all(fdr=fid)
+    return fid
+
+
+def _version(sess, fid):
+    import re as _re
+    m = _re.search(r'name="version" value="([^"]+)"', sess.get(f"/fdrs/{fid}").text)
+    return m.group(1)
+
+
+def _arm(point):
+    key = open(os.path.join(VARDIR, "internal.key")).read().strip()
+    assert httpx.post(B + "/internal/fault", data={"point": point}, headers={"x-internal-key": key}).status_code == 200
+
+
+def _counts(fid):
+    c = db()
+    return (c.execute("SELECT count(*) FROM release_approvals").fetchone()[0],
+            c.execute("SELECT state FROM release_requests WHERE fdr_id=? ORDER BY id DESC", (fid,)).fetchone()[0],
+            c.execute("SELECT count(*) FROM events WHERE fdr_id=? AND kind IN ('release_signed','release_instruction_issued')", (fid,)).fetchone()[0],
+            c.execute("SELECT count(*) FROM actions WHERE fdr_id=? AND action='release'", (fid,)).fetchone()[0])
+
+
+def test_g03_hold_placed_before_approval_commits_blocks_it(off):
+    fid = _two_signer_case(off, "FD-0000990101")
+    rb2 = S("officer:RB-02")
+    v = _version(rb2, fid)
+    assert off.post(f"/fdrs/{fid}/hold", reason="Court order pending in WP 123/2026").status_code == 303
+    assert rb2.post(f"/fdrs/{fid}/release/approve", version=v).status_code == 409
+    assert _counts(fid)[:3] == (0, "pending", 0)
+
+
+def test_g05_g06_stale_version_and_duplicate_requests(off):
+    fid = _two_signer_case(off, "FD-0000990102")
+    rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
+    v = _version(rb2, fid)
+    assert rb2.post(f"/fdrs/{fid}/release/approve", version=v).status_code == 303          # signature 1 of 2
+    assert rb3.post(f"/fdrs/{fid}/release/approve", version=v).status_code == 409          # saw the case before that signature
+    v2 = _version(rb3, fid)
+    assert rb3.post(f"/fdrs/{fid}/release/approve", version=v2).status_code == 303
+    assert rb3.post(f"/fdrs/{fid}/release/approve", version=v2).status_code == 409          # duplicate: already decided
+    a, state, ev, act = _counts(fid)
+    assert (a, state, ev, act) == (2, "approved", 2, 1)                                     # one transition, one letter
+
+
+@pytest.mark.parametrize("point", ["after_signature", "after_state", "before_audit", "after_audit"])
+def test_g07_g08_failure_mid_approval_rolls_everything_back(off, point):
+    fid = _two_signer_case(off, f"FD-00009902{['after_signature','after_state','before_audit','after_audit'].index(point)}0")
+    rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303
+    before = _counts(fid)
+    head = off.get("/api/audit/verify").json()
+    _arm(point)
+    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 500
+    assert _counts(fid) == before                                                           # no signature, state, action or audit
+    assert off.get("/api/audit/verify").json() == head
+    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303                     # and it works once the fault is gone
+    assert _counts(fid)[1] == "approved"
+
+
+# ---------------------------------------------------------------- C-series: issued instruction vs completed release
+def _issued(off, fd="FD-0000990300"):
+    fid = _two_signer_case(off, fd, principal="12000000")
+    S("officer:RB-02").post(f"/fdrs/{fid}/release/approve")
+    S("officer:RB-03").post(f"/fdrs/{fid}/release/approve")
+    letter = db().execute("SELECT letter_no FROM release_requests WHERE fdr_id=? AND state='approved'", (fid,)).fetchone()[0]
+    return fid, letter
+
+
+def _complete(sess, fid, letter, fd, amount="12000000.00", ack=b"%PDF-1.4\n% ack 1\n%%EOF\n", ref="SBN/ACK/2026/0091"):
+    files = {"ack": ("ack.pdf", ack, "application/pdf")} if ack else None
+    return sess.c.post(f"/fdrs/{fid}/release/complete", data={"csrf": sess.csrf, "letter_no": letter, "fd_number": fd, "amount": amount, "bank_ref": ref}, files=files)
+
+
+def test_c01_issued_instruction_is_not_completion(off):
+    fid, letter = _issued(off)
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
+    page = off.get(f"/fdrs/{fid}").text
+    assert "awaiting the bank" in page and "Release instruction issued" in page
+    assert off.get(f"/fdrs/{fid}/release-letter").status_code == 200                       # the instruction exists
+
+
+def test_c02_c03_completion_evidence_must_match_and_be_new(off):
+    fid, letter = _issued(off, "FD-0000990301")
+    rec = S("officer:RB-04")
+    fd = FD[fid]
+    assert _complete(S("officer:RB-02"), fid, letter, fd).status_code == 403                # a signer cannot complete
+    assert _complete(off, fid, letter, fd).status_code == 403                               # nor the proposer
+    assert _complete(rec, fid, letter, fd, ack=None).status_code == 422
+    assert _complete(rec, fid, "AICTE/RB/REL/2026/9999", fd).status_code == 422             # another letter
+    assert _complete(rec, fid, letter, "FD-0000123456").status_code == 422                  # another FD
+    assert _complete(rec, fid, letter, fd, amount="1.00").status_code == 422                 # another amount
+    assert _complete(rec, fid, letter, fd, ack=MEMO).status_code == 422                      # MEMO bytes already on record
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
+
+
+def test_c04_c06_valid_completion_once(off):
+    fid, letter = _issued(off, "FD-0000990302")
+    rec = S("officer:RB-04")
+    assert _complete(rec, fid, letter, FD[fid]).status_code == 303
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is not None
+    assert _complete(rec, fid, letter, FD[fid], ack=b"%PDF-1.4\n% ack 2\n%%EOF\n").status_code == 409   # retried: no duplicate
+    c = db()
+    assert c.execute("SELECT count(*) FROM events WHERE fdr_id=? AND kind='release_completed'", (fid,)).fetchone()[0] == 1
+    assert c.execute("SELECT kind, uploaded_by FROM documents WHERE fdr_id=? AND kind='bank_acknowledgement'", (fid,)).fetchall() == [("bank_acknowledgement", "officer:RB-04")]
+    assert "Released" in rec.get(f"/fdrs/{fid}").text
+
+
+def test_c05_changed_basis_needs_review_not_completion(off):
+    fid, letter = _issued(off, "FD-0000990303")
+    inst = S("institution:INST-77")
+    assert inst.c.post(f"/fdrs/{fid}/documents", data={"csrf": inst.csrf, "kind": "other"},
+                       files={"file": ("late.pdf", b"%PDF-1.4\n% late\n%%EOF\n", "application/pdf")}).status_code == 303
+    assert _complete(S("officer:RB-04"), fid, letter, FD[fid]).status_code == 409
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None

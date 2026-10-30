@@ -117,7 +117,11 @@ def next_action(b, gates, who=None):
     """The single most useful next step for the officer, derived from the same gates the server enforces."""
     st = b["status"][0]
     if st == "released":
-        return {"kind": "done", "title": "Released", "text": "Approved by two officers against a current bank confirmation. The release letter is ready."}
+        return {"kind": "done", "title": "Released", "text": "Signed by separate officers against a current bank confirmation, and the bank has acknowledged releasing the pledge."}
+    if st == "instruction_issued":
+        iss = b["issued"]
+        return {"kind": "issued", "title": f"Instruction {iss['letter_no']} issued",
+                "text": "The signed release instruction has gone to the bank. The deposit stays monitored until the completion recorder logs the bank's acknowledgement for this letter."}
     if st == "renewed":
         sc = b["successor"]
         return {"kind": "done", "title": f"Renewed into {sc['id']}",

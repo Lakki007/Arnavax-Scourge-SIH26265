@@ -46,7 +46,9 @@ BEHAVIOURS = {
     "two_fdrs": "Response lists every deposit of the customer",
     "unrelated": "Returns a different deposit",
     "slow": "Bank responds after 8 seconds",
+    "custom_lien": "Bank shows this lien wording (type below)",
 }
+DEFAULT_LIEN = "AICTE NEW DELHI (SECURITY DEPOSIT)"
 
 
 def bank_state_initial():
@@ -75,7 +77,8 @@ def read_bank_state():
 # Named demo accounts (DEMO MODE ONLY; SCOURGE_AUTH=password deployments create accounts with scripts/create_account.py).
 DEMO_PASSWORD = os.environ.get("SCOURGE_DEMO_PASSWORD", "Scourge-demo-2026")
 DEMO_ACCOUNTS = [("rb01.scrutiny", "officer", None, "RB-01"), ("rb02.approver", "officer", None, "RB-02"),
-                 ("rb03.authority", "officer", None, "RB-03"), ("inst42.registrar", "institution", "INST-42", None),
+                 ("rb03.authority", "officer", None, "RB-03"), ("pg01.reviewer", "officer", None, "PG-01"),
+                 ("vg01.reviewer", "officer", None, "VG-01"), ("fn01.reviewer", "officer", None, "FN-01"), ("rb04.recorder", "officer", None, "RB-04"), ("inst42.registrar", "institution", "INST-42", None),
                  ("inst77.registrar", "institution", "INST-77", None)]
 
 
