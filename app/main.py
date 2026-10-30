@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, eadvice, i18n, jobs, lifecycle, policy, procs, seed, totp, vault, views
+from . import auth, db, eadvice, i18n, jobs, lifecycle, policy, procs, reports, seed, totp, vault, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
 HERE = Path(__file__).parent
@@ -1479,6 +1479,53 @@ def audit_csv(request: Request):
         w.writerow([r["id"], datetime.utcfromtimestamp(r["at"]).isoformat() + "Z", r["actor"], r["kind"], r["fdr_id"] or "", r["detail_json"], r["prev_hash"] or "", r["hash"] or ""])
     db.event(auth.actor(s), "audit_exported")
     return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="scourge-audit.csv"'})
+
+
+# ----------------------------------------------------------------- reports, calendar, reconciliation
+@app.get("/reports", response_class=HTMLResponse)
+def reports_page(request: Request):
+    s = auth.require(request, "officer")
+    rows = all_rows(s)
+    return render(request, "reports.html", s, k=reports.kpis(rows), cal=reports.calendar(rows), rupees=lifecycle.rupees)
+
+
+@app.get("/reports/register.{fmt}")
+def register_export(request: Request, fmt: str):
+    s = auth.require(request, "officer")
+    rows = all_rows(s)
+    if fmt == "csv":
+        body, mt = reports.to_csv(rows), "text/csv"
+    elif fmt == "xlsx":
+        body, mt = reports.to_xlsx(rows, reports.kpis(rows)), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        raise HTTPException(404, "Unknown format.")
+    db.event(auth.actor(s), "register_exported", None, format=fmt, rows=len(rows))
+    return Response(body, media_type=mt, headers={"Content-Disposition": f'attachment; filename="scourge-register.{fmt}"'})
+
+
+@app.get("/reconcile", response_class=HTMLResponse)
+def reconcile_page(request: Request):
+    s = auth.require(request, "officer")
+    return render(request, "reconcile.html", s, findings=None)
+
+
+@app.post("/reconcile", response_class=HTMLResponse)
+async def reconcile_run(request: Request):
+    s = auth.require(request, "officer")
+    form = await request.form()
+    auth.check_csrf(s, form.get("csrf", ""))
+    up = form.get("file")
+    if not up or not getattr(up, "filename", ""):
+        return render(request, "reconcile.html", s, findings=None, error="Choose a bank file first.", status=400)
+    data = await up.read(reports.MAX_BYTES + 1)
+    try:
+        kind, items = reports.parse(up.filename, data)
+    except reports.BadFile as e:
+        return render(request, "reconcile.html", s, findings=None, error=str(e), status=400)
+    findings = reports.reconcile(kind, items, all_rows(s))
+    db.event(auth.actor(s), "bank_file_reconciled", None, file=up.filename[:80], file_kind=kind, items=len(items),
+             sha256=hashlib.sha256(data).hexdigest(), findings=len(findings))
+    return render(request, "reconcile.html", s, findings=findings, kind=kind, n=len(items), fname=up.filename)
 
 
 @app.get("/system", response_class=HTMLResponse)

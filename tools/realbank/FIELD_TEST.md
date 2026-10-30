@@ -45,7 +45,8 @@ MAX_SENT=16384 MAX_RECV=262144 \
 
 - For an HTML page, put the visible **labels** in `REVEAL` (e.g. `Maturity Date,Lien`).
 - "data limit" error → double `MAX_SENT` / `MAX_RECV` and rerun. "unexpected end of file" → rerun once.
-- POST requests are not supported by the probe yet: note it and tell the team (a quick fix).
+- **POST requests** (most Indian banks, e.g. SBI's `accounts` call): add `METHOD=POST BODY_FILE=body.txt`. Put the exact request payload in `body.txt`: DevTools → **Payload** tab → **view source** → copy. The payload, like the headers, stays hidden in the proof.
+- **Encrypted response bodies.** Some banks (SBI YONO, for example) encrypt the JSON inside the HTTPS response, so the page shows `{"body":"<ciphertext>","header":{"status":"success",...}}`. Reveal the plain parts (`REVEAL='status,requestNo'`). The proof then shows that the bank's real server answered this logged-in request successfully; the account fields themselves stay encrypted. Reading them needs the browser's per-session app key disclosed to the verifier (roadmap item).
 
 ## 4. Clean up
 

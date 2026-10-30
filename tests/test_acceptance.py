@@ -873,3 +873,31 @@ def test_branch_link_works_for_a_signed_in_browser_and_hindi_statuses(off):
     assert off.get(link.split("8080", 1)[1]).status_code == 200                       # opened while signed in as an officer
     inst = S("institution:INST-42"); inst.c.get("/lang/hi")
     assert "केवल कागज़" in inst.get("/portal").text and "संस्थान द्वारा प्रस्तुत" in inst.get("/portal").text
+
+
+def test_reports_exports_and_calendar(off):
+    r = off.get("/reports")
+    assert r.status_code == 200 and 'id="kpis"' in r.text and 'id="calendar"' in r.text
+    x = off.get("/reports/register.xlsx")
+    assert x.status_code == 200 and x.content[:2] == b"PK"
+    c = off.get("/reports/register.csv")
+    assert c.status_code == 200 and "FD-0000123456" in c.text
+    assert S("institution:INST-42").get("/reports").status_code in (303, 403)
+    with db() as con:
+        assert con.execute("SELECT count(*) FROM events WHERE kind='register_exported'").fetchone()[0] == 2
+
+
+def test_reconcile_bank_files_flags_but_never_decides(off):
+    samples = os.path.join(ROOT, "app", "static", "samples")
+    before = off.get("/fdrs/FDR-002").text.count("Discrepancy")
+    for name, expect in (("bank_fd_register.csv", "FD-0000777777"), ("statement.camt053.xml", "FD-0000555555"), ("statement.mt940", "FD-0000777777")):
+        with open(os.path.join(samples, name), "rb") as fh:
+            r = off.c.post("/reconcile", data={"csrf": off.csrf}, files={"file": (name, fh.read())})
+        assert r.status_code == 200 and 'id="recon"' in r.text and expect in r.text, name
+    assert off.get("/fdrs/FDR-002").text.count("Discrepancy") == before
+    bad = off.c.post("/reconcile", data={"csrf": off.csrf}, files={"file": ("x.xml", b"<!DOCTYPE a [<!ENTITY e 'x'>]><a/>")})
+    assert bad.status_code == 400
+    nocsrf = off.c.post("/reconcile", data={"csrf": "x"}, files={"file": ("a.csv", b"fd_number\nFD-1\n")})
+    assert nocsrf.status_code == 403
+    with db() as con:
+        assert con.execute("SELECT count(*) FROM events WHERE kind='bank_file_reconciled'").fetchone()[0] == 3

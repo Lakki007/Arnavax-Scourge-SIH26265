@@ -206,7 +206,7 @@ blocks = [
     ("FaMagnifyingGlass", MINT, "How it addresses the problem",
      [[("Paper is checked once and trusted for 10 years. Scourge ", {}), ("re-checks the bank any time and before every release", {"b": True}), (": a loan, early encashment, missing pledge (lien) or fake FDR shows up as a ", {}), ("Discrepancy", {"b": True, "c": CORAL_D}), (".", {})]]),
     ("FaShieldHalved", CORAL, "Innovation and uniqueness of the solution",
-     [[("Works on every bank's existing net-banking page, and API-ready", {"b": True}), (": no bank integration or AA licence needed today; a bank confirmation API plugs into the same verifier. Split key: the institution cannot edit what the bank said; fake banks and replays are rejected.", {})]]),
+     [[("Works on every bank's existing net-banking page, and API-ready", {"b": True}), (". Three evidence tiers: bank-session proof, then bank-signed e-advice, then branch confirmation. Split key: the institution cannot edit what the bank said; fakes and replays are rejected.", {})]]),
 ]
 y = 2.32
 for ic, col, head, body in blocks:
@@ -230,7 +230,7 @@ tx(s2, hx + 2.5, yb, hw - 2.8, 0.34, [[("Every value traces to the bank's own by
 pointer(s2, L, 5.47, CW, "The complete FDR lifecycle in one portal (all five stages run in the prototype)", color=INK, size=11.5)
 life = [("1  FILE", VIO, "Institution files online; renewals linked"),
         ("2  PROVE", SKY, "Bank-session proof on AICTE's challenge"),
-        ("3  MONITOR", AMBER, "T-90/60/30/7 alerts, escalation; Table 1.4 adequacy"),
+        ("3  MONITOR", AMBER, "T-90/60/30/7 alerts; adequacy; MT940/camt.053 reconcile"),
         ("4  DECIDE", CORAL, "Verdict + evidence; hash-chained audit"),
         ("5  PLEDGE RELEASE", MINT, "Dept clearances, 2 signers, holds; QR-signed letter")]
 lw5 = (CW - 4 * 0.22) / 5
@@ -252,9 +252,9 @@ s3 = S[2]; frame(s3)
 title(s3, [("TECHNICAL APPROACH", INK)], 30)
 pointer(s3, L, 1.22, 8, "Technologies to be used")
 stack = [("FaFingerprint", VIO, "Proof layer", "TLSNotary MPC-TLS · Rust", "Selective disclosure · rustls"),
-         ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "Hash-chained audit · verifier"),
+         ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "AES-GCM vault · hash-chained audit"),
          ("FaCode", MINT, "Frontend", "Server-rendered HTML · JS", "Live 3-party proof view"),
-         ("FaVial", AMBER, "Ops & QA", "nginx TLS · systemd", "pytest · Playwright · audits")]
+         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "181 tests · 2FA · audits")]
 cw4 = (CW - 3 * 0.2) / 4
 for i, (ic, col, head, l1, l2) in enumerate(stack):
     x = L + i * (cw4 + 0.2)
@@ -317,7 +317,7 @@ title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
          ("FaGlobe", SKY, "13 / 16", "real TLS sessions, 6 Indian banks", "public pages, not FD pages"),
-         ("FaVial", MINT, "115 / 115", "automated tests pass", "incl. attack, forgery + release tests"),
+         ("FaVial", MINT, "181 / 181", "automated tests pass", "incl. attack, forgery, 2FA, vault tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
@@ -337,7 +337,7 @@ for i, (h_, t_) in enumerate(feas):
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
-risks = [("Bank page hides liens, or bytes are withheld", "Fallback: bank-signed e-advice verified for that field only, never a guess"),
+risks = [("Bank page hides liens, or bytes are withheld", "Fallbacks: bank-signed e-advice, then branch confirmation; never a guess"),
          ("Fake bank site or a replayed old proof", "Rejected: bank certificate + single-use, 15-min challenge"),
          ("Proof of a different FD, or an edited screen", "Rejected / no effect: FD bound to challenge; proof covers bank bytes"),
          ("Bank needs browser-bound session / TLS 1.3", "Browser-extension prover; bank marked unsupported until then")]
@@ -362,7 +362,7 @@ title(s5, [("IMPACT AND BENEFITS", INK)], 30)
 pointer(s5, L, 1.22, 8, "Potential impact on the target audience")
 aud = [("FaUserTie", VIO, "AICTE RB officers", "A dated proof from the bank in seconds, not a letter in weeks"),
        ("FaLandmark", SKY, "AICTE finance", "The whole FDR book is re-checkable, before every release"),
-       ("FaSchool", MINT, "Institutions", "One short proof from their own net banking; nothing else revealed"),
+       ("FaSchool", MINT, "Institutions", "One short proof from their own net banking; Hindi or English"),
        ("FaGraduationCap", AMBER, "Students", "The deposit that protects them is checked across all 10 years")]
 for i, (ic, col, who, what) in enumerate(aud):
     x = L + i * (cw4 + 0.2)
@@ -404,7 +404,7 @@ for big, lab, col in res:
 ben = [("FaPeopleGroup", MINT, "Social", "students' deposits stay intact"),
        ("FaCoins", SKY, "Economic", "stops loss before release"),
        ("FaLeaf", RGBColor(0x16, 0xA3, 0x4A), "Environmental", "no paper letters or couriers"),
-       ("FaScaleBalanced", VIO, "Governance", "hash-chained, exportable audit")]
+       ("FaScaleBalanced", VIO, "Governance", "2FA, encrypted vault, chained audit")]
 bw = (CW - 3 * 0.2) / 4
 for i, (ic, col, h_, t_) in enumerate(ben):
     x = L + i * (bw + 0.2)
@@ -441,7 +441,7 @@ q = rect(s6, L + 0.2, 5.55, 1.08, 1.08, fill=WHITE, r=0.08)
 qp6 = s6.shapes.add_picture(IMG + "qr_dark.png", Inches(L + 0.25), Inches(5.6), Inches(0.98), Inches(0.98)); qp6.click_action.hyperlink.address = DEMO_HREF
 tx(s6, L + 1.45, 5.5, 4.7, 1.2, [[("PROJECT RESOURCES", {"f": H, "b": True, "s": 11, "c": MINT, "after": 3})],
    [("Demo video (90 s): ", {"b": True, "s": 9.5, "c": WHITE}), (DEMO_URL, {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
-   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 115 / 115 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
+   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 181 / 181 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
    [("Code + evidence: ", {"b": True, "s": 9.5, "c": WHITE}), ("github.com/Lakki007/Arnavax-Scourge-SIH26265", {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # comparison table (hero)

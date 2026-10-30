@@ -26,7 +26,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use http_body_util::{BodyExt, Empty};
+use http_body_util::{BodyExt, Full};
 use hyper::{Request, Uri, body::Bytes};
 use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf};
@@ -205,7 +205,16 @@ async fn prover<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(
     let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(tls.compat())).await?;
     tokio::spawn(conn);
 
-    let mut rb = Request::builder().uri(uri.path_and_query().unwrap().as_str()).method("GET").header("Host", host);
+    // METHOD=POST with BODY_FILE=<file holding the exact request payload from DevTools> for banks whose FD/account API is a POST.
+    // The body (like the headers) stays hidden in the proof; only the request line is revealed.
+    let method = envs("METHOD", "GET").to_ascii_uppercase();
+    if method != "GET" && method != "POST" { anyhow::bail!("METHOD must be GET or POST"); }
+    let body: Vec<u8> = match env::var("BODY_FILE") {
+        Ok(p) => std::fs::read_to_string(p)?.trim_end_matches(['\r', '\n']).as_bytes().to_vec(),
+        Err(_) => Vec::new(),
+    };
+    if method == "GET" && !body.is_empty() { anyhow::bail!("BODY_FILE is only for METHOD=POST"); }
+    let mut rb = Request::builder().uri(uri.path_and_query().unwrap().as_str()).method(method.as_str()).header("Host", host);
     if let Ok(path) = env::var("HEADERS_FILE") {
         for line in std::fs::read_to_string(path)?.lines() {
             if let Some((k, v)) = line.split_once(':') {
@@ -219,7 +228,8 @@ async fn prover<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(
         }
     }
     rb = rb.header("Accept-Encoding", "identity").header("Connection", "close");
-    let resp = sender.send_request(rb.body(Empty::<Bytes>::new())?).await?;
+    if method == "POST" { rb = rb.header("Content-Length", body.len().to_string()); }
+    let resp = sender.send_request(rb.body(Full::new(Bytes::from(body)))?).await?;
     let _ = resp.into_body().collect().await;
 
     let mut prover = prover_task.await??;
@@ -257,7 +267,13 @@ async fn verifier<T: AsyncWrite + AsyncRead + Send + Sync + Unpin + 'static>(
     let (driver, mut handle) = session.split();
     let driver_task = tokio::spawn(driver);
     // The verifier trusts only the public Web PKI (Mozilla roots), never a root the prover supplies.
-    let verifier = handle.new_verifier(VerifierConfig::builder().root_store(RootCertStore::mozilla()).build()?)?;
+    // Self-test only: PROVER_TRUSTS_OWN_CA makes both sides trust the TLSNotary fixture CA. Real runs use Mozilla roots.
+    let vroots = if env::var("PROVER_TRUSTS_OWN_CA").is_ok() {
+        RootCertStore { roots: vec![tlsn::webpki::CertificateDer(tlsn_server_fixture_certs::CA_CERT_DER.to_vec())] }
+    } else {
+        RootCertStore::mozilla()
+    };
+    let verifier = handle.new_verifier(VerifierConfig::builder().root_store(vroots).build()?)?;
     let verifier = match verifier.commit().await? {
         VerifierCommitStart::Mpc(v) => {
             if v.config().max_recv_data() > max_recv {

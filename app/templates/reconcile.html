@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Reconcile{% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <h1>Reconcile a bank file<span class="serif">A cross-check, never a verdict.</span></h1>
+  <p class="lede">Upload a bank's FD register (CSV) or an account statement (ISO 20022 camt.053 or SWIFT MT940). Scourge compares it with the register. A file is not signed by the bank's server, so a mismatch only puts the deposit on the re-check list; open it and ask the bank for a fresh session proof.</p>
+</div></div>
+<form method="post" action="/reconcile" enctype="multipart/form-data" class="panel" style="padding:16px;margin-bottom:20px">
+  <input type="hidden" name="csrf" value="{{ s.csrf }}">
+  <div class="field"><label for="file">Bank file (CSV, camt.053 XML or MT940; up to 2 MB)</label><input id="file" type="file" name="file" accept=".csv,.xml,.txt,.sta,.940" required></div>
+  <button class="btn btn-solid">Reconcile</button>
+  <span class="muted small">Samples: <a href="/static/samples/bank_fd_register.csv">FD register CSV</a> · <a href="/static/samples/statement.camt053.xml">camt.053</a> · <a href="/static/samples/statement.mt940">MT940</a> (synthetic)</span>
+</form>
+{% if error %}<div class="note note-bad" role="alert"><b>Could not read the file.</b> {{ error }}</div>{% endif %}
+{% if findings is not none %}
+<div class="note {{ 'note-good' if not findings else 'note-warn' }}" role="status" id="recon-summary" style="margin-bottom:12px"><b>{{ fname }}</b>: {{ n }} {{ 'rows' if kind == 'register' else 'statement entries' }} read; {{ findings|length }} finding{{ '' if findings|length == 1 else 's' }}.{% if not findings %} The bank file agrees with the register.{% endif %}</div>
+{% if findings %}
+<div class="table-wrap"><table id="recon"><thead><tr><th>Level</th><th>Deposit</th><th>Finding</th><th></th></tr></thead><tbody>
+{% for f in findings %}<tr class="lvl-{{ f.level }}"><td>{{ {'bad':'Mismatch','warn':'Check','info':'Note'}[f.level] }}</td><td class="mono small">{% if f.fdr %}<a href="/fdrs/{{ f.fdr }}">{{ f.fd }}</a>{% else %}{{ f.fd }}{% endif %}</td><td class="small">{{ f.text }}</td><td>{% if f.fdr %}<a class="btn btn-quiet" href="/fdrs/{{ f.fdr }}">Ask the bank</a>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}{% endif %}
+{% endblock %}
