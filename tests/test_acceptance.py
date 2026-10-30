@@ -747,3 +747,129 @@ def test_release_letter_qr_and_public_verify(off):
     raw = b64.urlsafe_b64decode(d + "=" * (-len(d) % 4)).replace(b"RB-02", b"RB-09")
     forged = url.replace(d, b64.urlsafe_b64encode(raw).decode().rstrip("="))
     assert "Invalid." in httpx.get(forged).text
+
+
+def _branch_link_and_code():
+    rows = db().execute("SELECT body FROM branch_outbox ORDER BY id DESC LIMIT 2").fetchall()
+    link = next(r[0] for r in rows if "http" in r[0]).split(": ", 1)[1]
+    code = next(r[0] for r in rows if "One-time code" in r[0]).split(": ")[1]
+    return link, code
+
+
+def test_branch_confirmation_tier3(off):
+    j, cid = prove(off, "FDR-002", "login")                                  # session proof cannot be completed
+    assert j["decision"] in ("insufficient_evidence", "rejected")
+    assert "Request branch confirmation" in off.get("/fdrs/FDR-002").text
+    assert off.post("/fdrs/FDR-002/branch/request").status_code == 303
+    assert off.post("/fdrs/FDR-002/branch/request").status_code == 409       # one open request at a time
+    link, code = _branch_link_and_code()
+    assert "fd-desk.hyderabad@mockbank.test" in off.get("/mockbank/branch-inbox").text
+    assert S("institution:INST-42").get("/mockbank/branch-inbox").status_code == 403
+    path = link.split("8080", 1)[1]
+    anon = httpx.Client(base_url=B)
+    assert anon.get(path.split("?")[0] + "?t=wrong").status_code == 404     # bad token
+    form = {"t": path.split("t=")[1], "status": "ACTIVE", "balance": "2500000.00", "maturity": "2029-01-15",
+            "holders": "SYNTHETIC INSTITUTE OF TECHNOLOGY TRUST / MEMBER SECRETARY AICTE", "lien": "AICTE NEW DELHI (SECURITY DEPOSIT)",
+            "officer_name": "R. Rao, Branch Manager"}
+    assert anon.post(path.split("?")[0], data={**form, "code": "000000" if code != "000000" else "111111"}).status_code == 403
+    r = anon.post(path.split("?")[0], data={**form, "code": code})
+    assert r.status_code == 200 and "Thank you" in r.text
+    assert anon.post(path.split("?")[0], data={**form, "code": code}).status_code == 409   # single use
+    e = db().execute("SELECT id, decision, facts_json FROM evidence WHERE fdr_id='FDR-002' ORDER BY id DESC").fetchone()
+    assert e[1] == "verified" and json.loads(e[2])["tier"] == "branch_confirmation"
+    assert "Bank branch (tier 3)" in off.get("/register").text
+    assert off.post("/fdrs/FDR-002/decide", action="accept", evidence_id=str(e[0])).status_code == 303
+    assert "Confirmed by bank branch" in off.get("/fdrs/FDR-002").text
+
+
+def test_branch_cannot_override_session_discrepancy(off):
+    j, cid = prove(off, "FDR-002", "lien_loan")
+    assert j["decision"] == "discrepancy"
+    j, cid = prove(off, "FDR-002", "login")
+    off.post("/fdrs/FDR-002/branch/request")
+    link, code = _branch_link_and_code()
+    path = link.split("8080", 1)[1]
+    r = httpx.post(B + path.split("?")[0], data={"t": path.split("t=")[1], "code": code, "status": "ACTIVE", "balance": "2500000.00",
+                   "maturity": "2029-01-15", "holders": "X / MEMBER SECRETARY AICTE", "lien": "AICTE NEW DELHI", "officer_name": "Colluding clerk"})
+    assert r.status_code == 200
+    e = db().execute("SELECT decision, reason FROM evidence WHERE fdr_id='FDR-002' ORDER BY id DESC").fetchone()
+    assert e == ("discrepancy", "session_proof_outranks")
+
+
+def test_document_vault_encrypts_checks_and_detects_tampering(off):
+    import glob
+    inst = S("institution:INST-42")
+    pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+    up = lambda sess, data, name="fdr.pdf": sess.c.post("/fdrs/FDR-001/documents", data={"csrf": sess.csrf, "kind": "fdr_receipt"},
+                                                         files={"file": (name, data, "application/pdf")})
+    assert up(inst, pdf).status_code == 303
+    assert up(inst, b"%PDF-1.4\n/JavaScript (alert(1))\n%%EOF").status_code == 422          # active content refused
+    assert up(inst, b"MZ\x90\x00 not a pdf", "x.pdf").status_code == 422                   # checked by content
+    row = db().execute("SELECT id, stored_as, sha256 FROM documents WHERE fdr_id='FDR-001'").fetchone()
+    stored = os.path.join(VARDIR, "vault", row[1])
+    assert pdf not in open(stored, "rb").read()                                            # ciphertext on disk
+    assert off.get(f"/documents/{row[0]}").status_code == 422                              # officer must give a reason
+    r = off.get(f"/documents/{row[0]}?reason=Scrutiny%20of%20renewal%20file")
+    assert r.status_code == 200 and r.content == pdf
+    assert inst.get(f"/documents/{row[0]}").content == pdf                                 # owner, no reason needed
+    assert S("institution:INST-77").get(f"/documents/{row[0]}").status_code == 404         # other institution
+    data = bytearray(open(stored, "rb").read()); data[5] ^= 1; open(stored, "wb").write(bytes(data))   # tamper on disk
+    assert off.get(f"/documents/{row[0]}?reason=Scrutiny%20of%20renewal%20file").status_code == 409
+    assert db().execute("SELECT COUNT(*) FROM events WHERE kind='document_integrity_failed'").fetchone()[0] == 1
+    assert db().execute("SELECT COUNT(*) FROM notifications WHERE kind='document_integrity_failed'").fetchone()[0] == 1
+
+
+def _signin_raw(role, otp=""):
+    c = httpx.Client(base_url=B, follow_redirects=False, timeout=60)
+    r = c.post("/signin", data={"role": role, "next": "/", "access_code": os.environ.get("SCOURGE_ACCESS_CODE", ""), "otp": otp})
+    return c, r
+
+
+def test_two_factor_signin_lockout_and_step_up(off):
+    import sys; sys.path.insert(0, ROOT)
+    from app import totp
+    rb3 = S("officer:RB-03")
+    assert rb3.get("/account/mfa").status_code == 200
+    secret = db().execute("SELECT secret FROM officer_mfa WHERE officer='RB-03'").fetchone()[0]
+    assert rb3.post("/account/mfa/enable", otp="000000" if totp.code_at(secret, totp.now_step()) != "000000" else "111111").status_code == 422
+    assert rb3.post("/account/mfa/enable", otp=totp.code_at(secret, totp.now_step())).status_code == 303
+    assert "Two-factor sign-in is on" in rb3.get("/account/mfa?enabled=1").text
+    # sign-in now needs the code; a replayed code is refused
+    c, r = _signin_raw("officer:RB-03")
+    assert r.status_code == 403 and "two-factor" in r.text
+    c, r = _signin_raw("officer:RB-03", totp.code_at(secret, totp.now_step() + 1))
+    assert r.status_code == 303
+    # step-up: release approval needs a fresh code
+    eid = _confirmed(off)
+    off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0400 term completed")
+    _clear_all(off)
+    csrf = json.loads(base64.urlsafe_b64decode(c.cookies["scourge_session"].rsplit(".", 1)[0]))["csrf"]
+    assert c.post("/fdrs/FDR-001/release/approve", data={"csrf": csrf}).status_code == 403
+    db().execute("UPDATE officer_mfa SET last_step=last_step-5 WHERE officer='RB-03'").connection.commit()
+    assert c.post("/fdrs/FDR-001/release/approve", data={"csrf": csrf, "otp": totp.code_at(secret, totp.now_step())}).status_code == 303
+    # lockout after five wrong codes (the missing code above already counted as one)
+    for _ in range(4):
+        assert _signin_raw("officer:RB-03", "999999")[1].status_code == 403
+    assert _signin_raw("officer:RB-03", totp.code_at(secret, totp.now_step()))[1].status_code == 429
+
+
+def test_hindi_for_institutions(off):
+    inst = S("institution:INST-42")
+    assert "My deposits" in inst.get("/portal").text
+    inst.c.get("/lang/hi")
+    page = inst.get("/portal").text
+    assert "मेरी जमा राशियाँ" in page and "पंजीकृत जमा राशियाँ" in page and 'lang="hi"' in page
+    assert "सुरक्षा जमा में कमी" in inst.get("/notifications").text
+    inst.c.get("/lang/en")
+    assert "Registered deposits" in inst.get("/portal").text
+    off.c.cookies.set("lang", "hi")
+    assert 'lang="en"' in off.get("/register").text                       # officer pages stay English
+
+
+def test_branch_link_works_for_a_signed_in_browser_and_hindi_statuses(off):
+    j, cid = prove(off, "FDR-002", "login")
+    off.post("/fdrs/FDR-002/branch/request")
+    link, code = _branch_link_and_code()
+    assert off.get(link.split("8080", 1)[1]).status_code == 200                       # opened while signed in as an officer
+    inst = S("institution:INST-42"); inst.c.get("/lang/hi")
+    assert "केवल कागज़" in inst.get("/portal").text and "संस्थान द्वारा प्रस्तुत" in inst.get("/portal").text

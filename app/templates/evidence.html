@@ -12,6 +12,7 @@
   </div>
   <div class="head-status"><span class="stamp stamp-{{ e.decision }} fresh">{{ LABEL[e.decision] }}</span></div>
 </div>
+{% if facts.get('tier') == 'branch_confirmation' %}<p class="note note-warn" id="tier-note"><b>Evidence tier 3: bank branch confirmation.</b> Answered by {{ facts.branch.officer }} at {{ facts.branch.name }} ({{ facts.branch.code }}) through AICTE's signed single-use link. Not a cryptographic proof of the bank's server; a later bank-session proof takes precedence.</p>{% endif %}
 {% if facts.get('verifier_trust') == 'test_ca' %}<p class="syn-line"><span class="badge-syn">Synthetic</span> Mock bank signed by a test certificate authority. The cryptographic proof is real; the bank is not.</p>{% endif %}
 
 {% if match %}{{ cvw_view(cvw, 'Authenticated from the bank\'s TLS session', true) }}{% endif %}

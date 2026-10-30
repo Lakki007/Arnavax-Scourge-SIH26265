@@ -66,6 +66,23 @@ CREATE TABLE IF NOT EXISTS release_clearances(
 CREATE TABLE IF NOT EXISTS release_approvals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), officer TEXT NOT NULL,
   at REAL NOT NULL, UNIQUE(release_id, officer));
+CREATE TABLE IF NOT EXISTS branch_requests(
+  id TEXT PRIMARY KEY, fdr_id TEXT NOT NULL REFERENCES fdrs(id), branch_code TEXT NOT NULL, contact TEXT NOT NULL,
+  token_sha256 TEXT NOT NULL, code_sha256 TEXT NOT NULL, created_at REAL NOT NULL, expires_at REAL NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('sent','answered','expired','withdrawn')), attempts INTEGER NOT NULL DEFAULT 0,
+  answered_at REAL, answer_json TEXT, evidence_id INTEGER, requested_by TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS branch_outbox(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL, to_addr TEXT NOT NULL, subject TEXT NOT NULL,
+  body TEXT NOT NULL, created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS documents(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), kind TEXT NOT NULL, filename TEXT NOT NULL,
+  mime TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, stored_as TEXT NOT NULL, wrapped_key TEXT NOT NULL,
+  nonce TEXT NOT NULL, uploaded_by TEXT NOT NULL, uploaded_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS officer_mfa(
+  officer TEXT PRIMARY KEY, secret TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL,
+  last_step INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS login_failures(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, who TEXT NOT NULL, at REAL NOT NULL);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 """

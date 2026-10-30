@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import io
 import json
+import os
 import re
 import secrets
 import time
@@ -19,7 +20,7 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, eadvice, jobs, lifecycle, policy, procs, seed, views
+from . import auth, db, eadvice, i18n, jobs, lifecycle, policy, procs, seed, totp, vault, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
 HERE = Path(__file__).parent
@@ -51,13 +52,22 @@ def ago(t):
     return f"{int(d // 86400)} days ago"
 
 
-T.env.globals.update(DEPTS=lifecycle.RULES['release']['departments'], inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
+T.env.globals.update(VAULT_KINDS=vault.KINDS, DEPTS=lifecycle.RULES['release']['departments'], inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
 T.env.filters["fromjson"] = json.loads
 
 
 def render(request, name, s=None, status=200, **ctx):
     s = s if s is not None else auth.read(request)
-    return T.TemplateResponse(request, name, {"s": s, "path": request.url.path, "health": procs.health(), **ctx}, status_code=status)
+    lang = "hi" if request.cookies.get("lang") == "hi" and (not s or s.get("role") != "officer") else "en"
+    return T.TemplateResponse(request, name, {"s": s, "path": request.url.path, "health": procs.health(), "lang": lang,
+                                              "t": i18n.translator(lang), "HI_BODY": i18n.HI_ALERT_BODY, **ctx}, status_code=status)
+
+
+@app.get("/lang/{code}")
+def set_lang(request: Request, code: str):
+    r = RedirectResponse(request.headers.get("referer") or "/portal", 303)
+    r.set_cookie("lang", "hi" if code == "hi" else "en", max_age=365 * 86400, samesite="lax", secure=COOKIE_SECURE)
+    return r
 
 
 def fdr_bundle(fid, _depth=0):
@@ -92,6 +102,8 @@ def fdr_bundle(fid, _depth=0):
         b["approvals"] = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
         b["signers_needed"] = 2 if float(f["principal"]) >= lifecycle.RULES["release"]["second_signer_from_rupees"] else 1
     b["eadvice"] = eadvice_state(b)
+    b["branch"] = db.q1("SELECT * FROM branch_requests WHERE fdr_id=? ORDER BY created_at DESC", (fid,))
+    b["documents"] = db.q("SELECT id, kind, filename, mime, size, sha256, uploaded_by, uploaded_at FROM documents WHERE fdr_id=? ORDER BY id DESC", (fid,))
     return b
 
 
@@ -230,7 +242,7 @@ def signin_page(request: Request, next: str = "/"):
 
 
 @app.post("/signin")
-def signin(request: Request, role: str = Form(...), next: str = Form("/"), access_code: str = Form("")):
+def signin(request: Request, role: str = Form(...), next: str = Form("/"), access_code: str = Form(""), otp: str = Form("")):
     # The code gates entry. Someone already signed in may switch demo roles (the officer's
     # "Switch to INST-42 to answer it" step) without typing it again.
     if ACCESS_CODE and not auth.read(request) and not hmac.compare_digest(access_code.encode(), ACCESS_CODE.encode()):
@@ -239,6 +251,18 @@ def signin(request: Request, role: str = Form(...), next: str = Form("/"), acces
         raise HTTPException(403, "Wrong access code. Ask the team for the judges' code.")
     if role == "officer" or (role.startswith("officer:") and role.split(":", 1)[1] in auth.OFFICERS):
         who = role.split(":", 1)[1] if ":" in role else "RB-01"
+        mfa = db.q1("SELECT * FROM officer_mfa WHERE officer=? AND enabled=1", (who,))
+        if mfa:
+            if db.q1("SELECT COUNT(*) AS n FROM login_failures WHERE who=? AND at>?", (who, time.time() - LOCKOUT_SECONDS))["n"] >= LOCKOUT_FAILURES:
+                db.event("anonymous", "signin_locked", officer=who)
+                raise HTTPException(429, f"Too many wrong codes for {who}. Sign-in is locked for 15 minutes.")
+            st = totp.verify(mfa["secret"], otp, mfa["last_step"])
+            if st is None:
+                db.x("INSERT INTO login_failures(who,at) VALUES(?,?)", (who, time.time()))
+                db.event("anonymous", "signin_otp_failed", officer=who)
+                time.sleep(0.3)
+                raise HTTPException(403, f"Officer {who} uses two-factor sign-in: enter the current 6-digit code from the authenticator app.")
+            db.x("UPDATE officer_mfa SET last_step=? WHERE officer=?", (st, who))
         cookie, dest = auth.make_cookie("officer", None, who), "/register"
     elif role.startswith("institution:") and db.q1("SELECT 1 AS x FROM institutions WHERE id=?", (role.split(":", 1)[1],)):
         cookie, dest = auth.make_cookie("institution", role.split(":", 1)[1]), "/portal"
@@ -431,6 +455,7 @@ def fdr_detail(request: Request, fid: str):
     return render(request, "fdr_detail.html", s, b=b, latest=latest, latest_match=latest_match, latest_facts=latest_facts, gates=gates,
                   challenges=chall, events=events, jobs=jobs_, now=time.time(), bank_dep=bank_dep,
                   cvw=views.claim_vs_witness(b["f"], latest_match), nxt=views.next_action(b, gates, auth.officer_id(s) if s["role"] == "officer" else None),
+                  officer_mfa=bool(s["role"] == "officer" and db.q1("SELECT 1 AS x FROM officer_mfa WHERE officer=? AND enabled=1", (auth.officer_id(s),))),
                   rc=receipt_for(s, latest, latest_facts) if latest else None,
                   reason=policy.reason_text(latest["reason"], latest_facts) if latest and latest["reason"] else "")
 
@@ -572,8 +597,9 @@ def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(
 
 
 @app.post("/fdrs/{fid}/release/approve")
-def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str = Form("")):
+def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str = Form(""), otp: str = Form("")):
     s = officer_post(request, csrf)
+    step_up(s, otp)
     b = get_fdr_or_404(s, fid)
     ok, why = action_gates(b)["approve"]
     if not ok:
@@ -1081,6 +1107,223 @@ def mockbank_open(request: Request, csrf: str = Form(""), fd_number: str = Form(
     return RedirectResponse("/mockbank#" + fd_number, 303)
 
 
+# ----------------------------------------------------------------- two-factor (authenticator app) for officers
+LOCKOUT_FAILURES, LOCKOUT_SECONDS = 5, 15 * 60
+MFA_REQUIRED = os.environ.get("SCOURGE_MFA_REQUIRED") == "1"
+
+
+def step_up(s, otp):
+    """Release approval needs a fresh authenticator code when the officer has 2FA (or 2FA is mandatory)."""
+    who = auth.officer_id(s)
+    mfa = db.q1("SELECT * FROM officer_mfa WHERE officer=? AND enabled=1", (who,))
+    if not mfa:
+        if MFA_REQUIRED:
+            raise HTTPException(409, "Two-factor sign-in is mandatory for release approval. Set it up under Account first.")
+        return
+    st = totp.verify(mfa["secret"], otp, mfa["last_step"])
+    if st is None:
+        db.event(f"officer:{who}", "step_up_failed")
+        raise HTTPException(403, "Enter the current 6-digit authenticator code to approve a release (step-up check).")
+    db.x("UPDATE officer_mfa SET last_step=? WHERE officer=?", (st, who))
+
+
+@app.get("/account/mfa", response_class=HTMLResponse)
+def mfa_page(request: Request):
+    s = auth.require(request, "officer")
+    who = auth.officer_id(s)
+    row = db.q1("SELECT * FROM officer_mfa WHERE officer=?", (who,))
+    if not row:
+        db.x("INSERT INTO officer_mfa(officer,secret,enabled,created_at) VALUES(?,?,0,?)", (who, totp.new_secret(), time.time()))
+        row = db.q1("SELECT * FROM officer_mfa WHERE officer=?", (who,))
+    qr_svg = None
+    if not row["enabled"]:
+        import qrcode
+        import qrcode.image.svg
+        buf = io.BytesIO()
+        qrcode.make(totp.uri(row["secret"], who), image_factory=qrcode.image.svg.SvgPathImage, box_size=6, border=2).save(buf)
+        qr_svg = base64.b64encode(buf.getvalue()).decode()
+    return render(request, "mfa.html", s, row=row, who=who, qr_svg=qr_svg, uri=totp.uri(row["secret"], who))
+
+
+@app.post("/account/mfa/enable")
+def mfa_enable(request: Request, csrf: str = Form(""), otp: str = Form("")):
+    s = officer_post(request, csrf)
+    who = auth.officer_id(s)
+    row = db.q1("SELECT * FROM officer_mfa WHERE officer=?", (who,))
+    if not row:
+        raise HTTPException(409, "Open the set-up page first.")
+    st = totp.verify(row["secret"], otp, row["last_step"])
+    if st is None:
+        raise HTTPException(422, "That code is not valid. Check the app's clock and try the current code.")
+    db.x("UPDATE officer_mfa SET enabled=1, last_step=? WHERE officer=?", (st, who))
+    db.event(f"officer:{who}", "mfa_enabled")
+    return RedirectResponse("/account/mfa?enabled=1", 303)
+
+
+# ----------------------------------------------------------------- encrypted document vault
+@app.post("/fdrs/{fid}/documents")
+async def upload_document(request: Request, fid: str, csrf: str = Form(""), kind: str = Form("fdr_receipt"), file: UploadFile = File(None)):
+    s = auth.require(request)
+    auth.check_csrf(s, csrf)
+    b = get_fdr_or_404(s, fid)
+    if kind not in vault.KINDS:
+        raise HTTPException(400, "Unknown document type.")
+    if file is None or not file.filename:
+        raise HTTPException(422, "Choose a file.")
+    data = await file.read(vault.MAX_BYTES + 1)
+    try:
+        mime = vault.check(data)
+    except vault.Refused as e:
+        db.event(auth.actor(s), "document_refused", fid, reason=str(e), filename=file.filename[:120])
+        raise HTTPException(422, str(e))
+    stored, wk, nonce, sha = vault.seal(fid, data)
+    did = db.x("INSERT INTO documents(fdr_id,kind,filename,mime,size,sha256,stored_as,wrapped_key,nonce,uploaded_by,uploaded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+               (fid, kind, re.sub(r"[^\w.\- ]", "_", file.filename)[:120], mime, len(data), sha, stored, wk, nonce, auth.actor(s), time.time()))
+    db.event(auth.actor(s), "document_stored", fid, document=did, doc_type=kind, sha256=sha, size=len(data))
+    return RedirectResponse(f"/fdrs/{fid}#documents", 303)
+
+
+@app.get("/documents/{did}")
+def download_document(request: Request, did: int, reason: str = ""):
+    s = auth.require(request)
+    d = db.q1("SELECT * FROM documents WHERE id=?", (did,))
+    if not d:
+        raise HTTPException(404, "No such document.")
+    get_fdr_or_404(s, d["fdr_id"])
+    reason = reason.strip()
+    if s["role"] == "officer" and not (10 <= len(reason) <= 300):
+        raise HTTPException(422, "Officers record a reason (10–300 characters) for every document download.")
+    try:
+        data = vault.open_doc(d)
+    except vault.IntegrityFailure as e:
+        db.event("system", "document_integrity_failed", d["fdr_id"], document=did, detail=str(e))
+        db.x("INSERT OR IGNORE INTO notifications(fdr_id,institution_id,kind,step,audience,channel,title,body,created_at,as_of,status) "
+             "SELECT ?, institution_id, 'document_integrity_failed', ?, 'officer', 'in_app', 'Document integrity failure', ?, ?, ?, 'shown' FROM fdrs WHERE id=?",
+             (d["fdr_id"], str(did), f"Document #{did} ({d['filename']}) failed its integrity check and was not served.", time.time(), date.today().isoformat(), d["fdr_id"]))
+        raise HTTPException(409, "This document failed its integrity check (it was changed after upload) and has not been served. Officers have been alerted.")
+    db.event(auth.actor(s), "document_downloaded", d["fdr_id"], document=did, reason=reason[:300] or None)
+    return Response(data, media_type=d["mime"], headers={"Content-Disposition": f'attachment; filename="{d["filename"]}"', "X-Content-Type-Options": "nosniff"})
+
+
+# ----------------------------------------------------------------- evidence tier 3: bank branch confirmation
+BANK_DIR = json.loads((ROOT / "config" / "bank_directory.json").read_text())
+BRANCH_TTL = 7 * 86400
+
+
+def _branch_for(f):
+    d = BANK_DIR.get(f["bank_host"])
+    if not d or not d["branches"]:
+        return None
+    # demo: route to the branch for the institution's city if listed, else the first reviewed branch
+    city = (db.q1("SELECT city FROM institutions WHERE id=?", (f["institution_id"],)) or {}).get("city", "")
+    for b_ in d["branches"]:
+        if city and city.lower() in b_["name"].lower():
+            return b_
+    return d["branches"][0]
+
+
+@app.post("/fdrs/{fid}/branch/request")
+def branch_request(request: Request, fid: str, csrf: str = Form("")):
+    """Tier 3: ask the bank branch (from AICTE's reviewed directory, never an institution-supplied address)
+    to confirm the deposit through a signed, expiring, single-use link plus a separate one-time code."""
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    f = b["f"]
+    if f["released_at"]:
+        raise HTTPException(409, "Already released.")
+    if db.q1("SELECT 1 AS x FROM branch_requests WHERE fdr_id=? AND state='sent' AND expires_at>?", (fid, time.time())):
+        raise HTTPException(409, "A branch confirmation request is already open for this FDR.")
+    br = _branch_for(f)
+    if not br:
+        raise HTTPException(409, "No reviewed branch contact for this bank in AICTE's directory.")
+    rid = "BR-" + secrets.token_hex(4).upper()
+    token, code = secrets.token_urlsafe(24), f"{secrets.randbelow(10**6):06d}"
+    now = time.time()
+    db.x("INSERT INTO branch_requests(id,fdr_id,branch_code,contact,token_sha256,code_sha256,created_at,expires_at,state,requested_by) VALUES(?,?,?,?,?,?,?,?,?,?)",
+         (rid, fid, br["code"], br["contact"], hashlib.sha256(token.encode()).hexdigest(), hashlib.sha256(code.encode()).hexdigest(),
+          now, now + BRANCH_TTL, "sent", auth.officer_id(s)))
+    link = f"{str(request.base_url).rstrip('/')}/branch/confirm/{rid}?t={token}"
+    # two separate messages, as a real deployment would send by e-mail and SMS (demo: held in the synthetic bank's inbox)
+    db.x("INSERT INTO branch_outbox(request_id,to_addr,subject,body,created_at) VALUES(?,?,?,?,?)",
+         (rid, br["contact"], f"AICTE request {rid}: confirm fixed deposit {f['fd_number']}",
+          f"AICTE asks {br['name']} to confirm deposit {f['fd_number']}. Open this single-use link (valid 7 days): {link}", now))
+    db.x("INSERT INTO branch_outbox(request_id,to_addr,subject,body,created_at) VALUES(?,?,?,?,?)",
+         (rid, br["contact"] + " (SMS)", f"AICTE one-time code for {rid}", f"One-time code: {code}", now))
+    db.event(f"officer:{auth.officer_id(s)}", "branch_confirmation_requested", fid, request=rid, branch=br["code"])
+    return RedirectResponse(f"/fdrs/{fid}#branch", 303)
+
+
+def _open_branch_request(rid, t):
+    r = db.q1("SELECT * FROM branch_requests WHERE id=?", (rid,))
+    if not r or not t or not hmac.compare_digest(r["token_sha256"], hashlib.sha256(t.encode()).hexdigest()):
+        raise HTTPException(404, "This confirmation link is not valid.")
+    if r["state"] != "sent":
+        raise HTTPException(409, "This confirmation request has already been answered or closed.")
+    if r["expires_at"] < time.time():
+        raise HTTPException(409, "This confirmation link has expired.")
+    if r["attempts"] >= 5:
+        raise HTTPException(429, "Too many wrong codes. AICTE must issue a new request.")
+    return r
+
+
+@app.get("/branch/confirm/{rid}", response_class=HTMLResponse)
+def branch_confirm_page(request: Request, rid: str, t: str = ""):
+    r = _open_branch_request(rid, t)
+    f = db.q1("SELECT f.*, i.name AS inst_name FROM fdrs f JOIN institutions i ON i.id=f.institution_id WHERE f.id=?", (r["fdr_id"],))
+    br = next((x for x in BANK_DIR.get(f["bank_host"], {}).get("branches", []) if x["code"] == r["branch_code"]), {})
+    return render(request, "branch_confirm.html", auth.read(request), r=r, f=f, br=br, tok=t)
+
+
+@app.post("/branch/confirm/{rid}", response_class=HTMLResponse)
+def branch_confirm(request: Request, rid: str, t: str = Form(""), code: str = Form(""), status: str = Form(""),
+                   balance: str = Form(""), maturity: str = Form(""), holders: str = Form(""), lien: str = Form(""),
+                   officer_name: str = Form("")):
+    r = _open_branch_request(rid, t)
+    if not hmac.compare_digest(r["code_sha256"], hashlib.sha256(code.strip().encode()).hexdigest()):
+        db.x("UPDATE branch_requests SET attempts=attempts+1 WHERE id=?", (rid,))
+        db.event("bank_branch", "branch_code_rejected", r["fdr_id"], request=rid)
+        raise HTTPException(403, "Wrong one-time code.")
+    if len(officer_name.strip()) < 3:
+        raise HTTPException(422, "Enter the name and designation of the confirming bank officer.")
+    f = db.q1("SELECT * FROM fdrs WHERE id=?", (r["fdr_id"],))
+    answers = {"status": status.strip(), "balance": balance.strip(), "maturity": maturity.strip(), "holders": holders.strip(), "lien": lien.strip()}
+    fields = {k: ({"state": "proven", "value": v} if v else {"state": "not_exposed"}) for k, v in answers.items()}
+    br = next((x for x in BANK_DIR.get(f["bank_host"], {}).get("branches", []) if x["code"] == r["branch_code"]), {})
+    facts = {"gate": "facts_ok", "tier": "branch_confirmation", "fields": fields,
+             "branch": {"code": br.get("code"), "name": br.get("name"), "contact": br.get("contact"), "officer": officer_name.strip()[:120]},
+             "stages": {"tls_proof": "not a TLS proof: answered by the bank branch through AICTE's signed link"}}
+    decision, match = policy.apply(facts, f)
+    reason = None
+    since = time.time() - DEMO["confirmation_valid_days"] * 86400
+    for e in db.q("SELECT decision, facts_json FROM evidence WHERE fdr_id=? AND received_at>?", (f["id"], since)):
+        if e["decision"] == "discrepancy" and json.loads(e["facts_json"]).get("tier") != "branch_confirmation":
+            decision, reason = "discrepancy", "session_proof_outranks"
+    now = time.time()
+    cid = "CH-" + rid
+
+    def work(c):
+        c.execute("INSERT INTO challenges(id,fdr_id,institution_id,token,token_sha256,issued_at,expires_at,state,consumed_at,issued_by) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  (cid, f["id"], f["institution_id"], "-", r["token_sha256"], r["created_at"], r["expires_at"], "consumed", now, "branch"))
+        eid = c.execute("INSERT INTO evidence(challenge_id,fdr_id,received_at,gate,reason,decision,facts_json,match_json,metrics_json) VALUES(?,?,?,?,?,?,?,?,?)",
+                        (cid, f["id"], now, "facts_ok", reason, decision, json.dumps(facts), json.dumps(match), json.dumps({"tier": "branch_confirmation"}))).lastrowid
+        c.execute("UPDATE branch_requests SET state='answered', answered_at=?, answer_json=?, evidence_id=? WHERE id=? AND state='sent'",
+                  (now, json.dumps(answers), eid, rid))
+        return eid
+    eid = db.tx(work)
+    db.event("bank_branch", "branch_confirmation_answered", f["id"], request=rid, evidence_id=eid, decision=decision, branch=br.get("code"))
+    return render(request, "branch_confirm.html", auth.read(request), r=None, done=decision, f=f, br=br, tok="")
+
+
+@app.get("/mockbank/branch-inbox", response_class=HTMLResponse)
+def branch_inbox(request: Request):
+    """SYNTHETIC: the bank branch's mailbox. In a real deployment AICTE never sees these messages."""
+    s = auth.require(request)
+    rows = db.q("SELECT o.*, r.fdr_id, r.state FROM branch_outbox o JOIN branch_requests r ON r.id=o.request_id ORDER BY o.id DESC LIMIT 50")
+    if s["role"] == "institution":
+        raise HTTPException(403, "Only the (synthetic) bank branch reads this inbox.")
+    return render(request, "branch_inbox.html", s, rows=rows)
+
+
 # ----------------------------------------------------------------- release clearance (multi-department)
 @app.post("/fdrs/{fid}/release/clear")
 def release_clear(request: Request, fid: str, csrf: str = Form(""), dept: str = Form(""), decision: str = Form("clear"), note: str = Form("")):
@@ -1267,6 +1510,7 @@ def reset(request: Request, csrf: str = Form("")):
     seed.seed()
     for f in list(UPLOADS.glob("*")) + list(views.COPIES.glob("*")):
         f.unlink()
+    vault.wipe()
     procs.start_all()
     return RedirectResponse("/register" if s["role"] == "officer" else "/portal", 303)
 

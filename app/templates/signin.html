@@ -15,6 +15,7 @@
       <label><input type="radio" name="role" value="institution:{{ i.id }}"><span><b>{{ i.name }}, {{ i.city }}</b><span class="d">Institution {{ i.id }} (sample). Answers AICTE's proof requests from its own bank session.</span></span></label>
       {% endfor %}
     </fieldset>
+    <div class="field" style="margin-top:16px"><label for="otp">Authenticator code <span class="muted small">(officers with two-factor sign-in only)</span></label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
     {% if access_required %}<div class="field" style="margin-top:20px"><label for="access_code">Judges' access code</label><input id="access_code" name="access_code" type="password" autocomplete="off" required></div>{% endif %}
     <button class="btn btn-solid">Continue</button>
   </form>

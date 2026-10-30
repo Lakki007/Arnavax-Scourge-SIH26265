@@ -176,6 +176,7 @@ REASONS = {
     "no_fd_record": "The response did not contain any deposit record.",
     "fd_record_ambiguous": "The deposit appears more than once in the response.",
     "tls_proof_failed": "The TLS proof did not complete or did not verify.",
+    "session_proof_outranks": "A bank-session proof in the last 30 days contradicts this; a branch confirmation cannot override it.",
 }
 
 
@@ -215,6 +216,7 @@ def fdr_status(fdr, evidence_rows, actions, open_challenge):
             age_days = (time.time() - latest["received_at"]) / 86400
             if age_days > DEMO["confirmation_valid_days"]:
                 return "stale", "Confirmation expired", f"older than {DEMO['confirmation_valid_days']} days"
-            return "confirmed", "Confirmed by bank session", time.strftime("%d %b %Y, %H:%M", time.localtime(latest["received_at"]))
+            how = "Confirmed by bank branch" if '"branch_confirmation"' in (latest.get("facts_json") or "") else "Confirmed by bank session"
+            return "confirmed", how, time.strftime("%d %b %Y, %H:%M", time.localtime(latest["received_at"]))
         return "verified", "Verified, awaiting officer", ""
     return latest["decision"], LABEL[latest["decision"]], ""

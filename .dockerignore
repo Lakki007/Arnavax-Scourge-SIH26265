@@ -1,0 +1,6 @@
+var/
+var_unit/
+.git/
+**/__pycache__/
+.pytest_cache/
+docs/screenshots/

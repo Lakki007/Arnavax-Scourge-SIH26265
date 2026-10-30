@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Bank branch confirmation{% endblock %}
+{% block main %}
+<article class="panel" style="max-width:760px;margin:0 auto;padding:32px">
+  <p class="small muted">SYNTHETIC DEMO · AICTE request to a bank branch</p>
+  {% if done %}
+    <h1 style="font-size:1.5em">Thank you<span class="serif">Your confirmation has been recorded.</span></h1>
+    <p class="note note-good" id="branch-done">AICTE received the branch's answer for {{ f.fd_number }}. This link no longer works.</p>
+  {% else %}
+  <h1 style="font-size:1.5em">Confirm fixed deposit {{ f.fd_number }}<span class="serif">{{ br.name }}</span></h1>
+  <p class="muted small">AICTE asks the branch to confirm, from its own records, the state of this deposit held for {{ f.inst_name }}. The request came to {{ br.contact }} from AICTE's reviewed branch directory. Enter exactly what your core banking system shows; leave a field empty if you cannot confirm it.</p>
+  <form method="post" action="/branch/confirm/{{ r.id }}" class="stack" style="margin-top:16px">
+    <input type="hidden" name="t" value="{{ tok }}">
+    <div class="field"><label for="b-status">Status</label><input id="b-status" name="status" placeholder="e.g. ACTIVE, CLOSED"></div>
+    <div class="field"><label for="b-balance">Current balance (₹)</label><input id="b-balance" name="balance" placeholder="e.g. 2500000.00"></div>
+    <div class="field"><label for="b-maturity">Maturity date</label><input id="b-maturity" name="maturity" placeholder="YYYY-MM-DD"></div>
+    <div class="field"><label for="b-holders">Holders</label><input id="b-holders" name="holders" placeholder="e.g. TRUST NAME / MEMBER SECRETARY AICTE"></div>
+    <div class="field"><label for="b-lien">Lien / pledge marked</label><input id="b-lien" name="lien" placeholder="e.g. AICTE NEW DELHI (SECURITY DEPOSIT) or LOAN …"></div>
+    <div class="field"><label for="b-officer">Confirming officer (name, designation)</label><input id="b-officer" name="officer_name" required></div>
+    <div class="field"><label for="b-code">One-time code (sent separately)</label><input id="b-code" name="code" inputmode="numeric" autocomplete="one-time-code" required></div>
+    <button class="btn btn-solid">Submit confirmation</button>
+  </form>
+  {% endif %}
+</article>
+{% endblock %}

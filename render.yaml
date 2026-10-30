@@ -1,0 +1,12 @@
+# One-click hosted demo on Render (free web service). Set SCOURGE_ACCESS_CODE in the dashboard.
+services:
+  - type: web
+    name: scourge-demo
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: SCOURGE_ACCESS_CODE
+        sync: false
+      - key: SCOURGE_COOKIE_SECURE
+        value: "1"

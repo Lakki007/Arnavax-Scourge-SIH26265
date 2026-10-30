@@ -1,5 +1,5 @@
 {% macro status(st) -%}
-<span class="st st-{{ st[0] }}">{{ st[1] }}</span>
+<span class="st st-{{ st[0] }}">{{ t(st[1]) if t is defined else st[1] }}</span>
 {%- endmacro %}
 
 {% macro decision(d) -%}
@@ -84,5 +84,5 @@
 {%- endmacro %}
 
 {% macro vouch(r) -%}
-{% if r.status[0] == 'released' %}<span class="vouch">Released</span>{% elif r.status[0] == 'stale' %}<span class="vouch vouch-paper">Paper; bank confirmation expired</span>{% elif r.evidence %}{% set d = r.evidence[0].decision %}{% if d == 'verified' %}<span class="vouch vouch-bank">Bank's server</span>{% elif d == 'discrepancy' %}<span class="vouch vouch-bad">Bank contradicts</span>{% else %}<span class="vouch vouch-warn">Paper; last proof failed</span>{% endif %}<span class="muted small"> {{ ago(r.evidence[0].received_at) }}</span>{% else %}<span class="vouch vouch-paper">Paper only</span>{% endif %}
+{% if r.status[0] == 'released' %}<span class="vouch">{{ t("Released") if t is defined else "Released" }}</span>{% elif r.status[0] == 'stale' %}<span class="vouch vouch-paper">{{ t("Paper; bank confirmation expired") if t is defined else "Paper; bank confirmation expired" }}</span>{% elif r.evidence %}{% set d = r.evidence[0].decision %}{% if d == 'verified' and 'branch_confirmation' in r.evidence[0].facts_json %}<span class="vouch vouch-bank">{{ t("Bank branch (tier 3)") if t is defined else "Bank branch (tier 3)" }}</span>{% elif d == 'verified' %}<span class="vouch vouch-bank">{{ t("Bank's server") if t is defined else "Bank's server" }}</span>{% elif d == 'discrepancy' %}<span class="vouch vouch-bad">{{ t("Bank contradicts") if t is defined else "Bank contradicts" }}</span>{% else %}<span class="vouch vouch-warn">{{ t("Paper; last proof failed") if t is defined else "Paper; last proof failed" }}</span>{% endif %}<span class="muted small"> {{ ago(r.evidence[0].received_at) }}</span>{% else %}<span class="vouch vouch-paper">{{ t("Paper only") if t is defined else "Paper only" }}</span>{% endif %}
 {%- endmacro %}

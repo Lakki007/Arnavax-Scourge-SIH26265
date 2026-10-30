@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Branch inbox (synthetic){% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <h1>Bank branch inbox<span class="serif">Synthetic: plays the bank branch.</span></h1>
+  <p class="lede">AICTE's confirmation requests arrive here as two separate messages: a single-use link and a one-time code. In a real deployment they go to the branch's reviewed e-mail and phone, and AICTE never sees them; in the demo, open the link to play the branch.</p>
+</div></div>
+{% if rows %}
+<div class="table-wrap"><table><thead><tr><th>Request</th><th>To</th><th>Subject</th><th>Message</th><th>State</th></tr></thead><tbody>
+{% for m in rows %}<tr><td class="mono small">{{ m.request_id }}</td><td class="small">{{ m.to_addr }}</td><td class="small">{{ m.subject }}</td>
+<td class="small" style="word-break:break-all">{% if 'http' in m.body %}{{ m.body.split('http')[0] }}<a class="branch-link" href="{{ 'http' ~ m.body.split('http',1)[1] }}">open link</a>{% else %}<span class="branch-code">{{ m.body }}</span>{% endif %}</td><td class="small">{{ m.state }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty">No branch requests yet.</div>{% endif %}
+{% endblock %}

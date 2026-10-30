@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Two-factor sign-in{% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <h1>Two-factor sign-in<span class="serif">Officer {{ who }}</span></h1>
+  <p class="lede">With an authenticator app (Google Authenticator, Microsoft Authenticator, Authy…), signing in and approving a release need the current 6-digit code. Five wrong codes lock sign-in for 15 minutes.</p>
+</div></div>
+{% if row.enabled %}
+  <p class="note note-good" id="mfa-on"><b>Two-factor sign-in is on</b> for {{ who }}. Release approvals now ask for a fresh code (step-up).</p>
+{% else %}
+  <div class="grid-2">
+    <div class="panel" style="padding:20px">
+      <p><b>1.</b> Scan this QR code with your authenticator app.</p>
+      <img alt="QR code for the authenticator app" width="180" height="180" style="background:#fff;border-radius:8px;padding:6px" src="data:image/svg+xml;base64,{{ qr_svg }}">
+      <p class="small muted">Or enter this key manually: <span class="mono" id="mfa-secret">{{ row.secret }}</span></p>
+    </div>
+    <form method="post" action="/account/mfa/enable" class="panel" style="padding:20px">
+      <input type="hidden" name="csrf" value="{{ s.csrf }}">
+      <p><b>2.</b> Enter the 6-digit code the app shows.</p>
+      <div class="field"><label for="otp">Code</label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></div>
+      <button class="btn btn-solid">Turn on two-factor sign-in</button>
+    </form>
+  </div>
+{% endif %}
+{% endblock %}

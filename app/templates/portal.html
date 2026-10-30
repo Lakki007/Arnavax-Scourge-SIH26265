@@ -1,43 +1,43 @@
 {% extends "base.html" %}
-{% from "_m.html" import status, vouch %}
+{% from "_m.html" import status, vouch with context %}
 {% block title %}My deposits{% endblock %}
 {% block main %}
 <div class="page-head">
   <div>
-    <h1>{{ inst.name }}<span class="serif">Security deposits held for AICTE.</span></h1>
-    <p class="lede">When AICTE asks for a bank proof, answer it from your own net-banking session. AICTE's verifier sees only the deposit record, never your password, cookies, PAN or other accounts.</p>
+    <h1>{{ inst.name }}<span class="serif">{{ t("Security deposits held for AICTE.") }}</span></h1>
+    <p class="lede">{{ t("When AICTE asks for a bank proof, answer it from your own net-banking session. AICTE's verifier sees only the deposit record, never your password, cookies, PAN or other accounts.") }}</p>
   </div>
-  <div class="next-actions"><a class="btn btn-ghost" href="/fdrs/new">File a new FDR</a></div>
+  <div class="next-actions"><a class="btn btn-ghost" href="/fdrs/new">{{ t("File a new FDR") }}</a></div>
 </div>
 {% if notfound %}<div class="note note-warn" role="status" style="margin-bottom:20px">No deposit <span class="mono">{{ notfound }}</span> is registered for your institution.</div>{% endif %}
 
 <section class="panel" style="padding:16px;margin-bottom:24px" id="adequacy">
-  <b>Security deposit (AICTE APH Table 1.4):</b> required {{ inr(adq.required) }} · filed {{ inr(adq.filed) }} · bank-confirmed {{ inr(adq.confirmed) }}.
-  {% if adq.shortfall_filed > 0 %}<span class="st st-discrepancy">Shortfall {{ inr(adq.shortfall_filed) }}</span>{% else %}<span class="st st-confirmed">Adequate as filed</span>{% endif %}
-  {% if notes %}<ul class="small" style="margin:10px 0 0;padding-left:18px">{% for n in notes %}<li><b>{{ n.title }}</b>: {{ n.body }}</li>{% endfor %}</ul><a class="small" href="/notifications">All alerts</a>{% endif %}
+  <b>{{ t("Security deposit (AICTE APH Table 1.4):") }}</b> {{ t("required") }} {{ inr(adq.required) }} · {{ t("filed") }} {{ inr(adq.filed) }} · {{ t("bank-confirmed") }} {{ inr(adq.confirmed) }}.
+  {% if adq.shortfall_filed > 0 %}<span class="st st-discrepancy">{{ t("Shortfall") }} {{ inr(adq.shortfall_filed) }}</span>{% else %}<span class="st st-confirmed">{{ t("Adequate as filed") }}</span>{% endif %}
+  {% if notes %}<ul class="small" style="margin:10px 0 0;padding-left:18px">{% for n in notes %}<li><b>{{ t(n.title) }}</b>: {{ HI_BODY[n.kind].format(fd=n.fdr_id) if lang == "hi" and n.kind in HI_BODY else n.body }}</li>{% endfor %}</ul><a class="small" href="/notifications">{{ t("All alerts") }}</a>{% endif %}
 </section>
 <section aria-labelledby="open-h" style="margin-bottom:36px">
-  <h2 id="open-h">Open requests from AICTE</h2>
+  <h2 id="open-h">{{ t("Open requests from AICTE") }}</h2>
   {% if open_ch %}
   <div class="asks">
     {% for c in open_ch %}
     <section class="next next-request ask" aria-label="Request {{ c.id }}">
       <div class="next-text">
         <h3><span class="mono">{{ c.fd_number }}</span></h3>
-        <p>AICTE asks your bank's server to confirm this deposit. Challenge <span class="mono">{{ c.id }}</span>, single use, open until {{ when(c.expires_at) }}.</p>
+        <p>{{ t("AICTE asks your bank's server to confirm this deposit.") }} Challenge <span class="mono">{{ c.id }}</span>, single use, open until {{ when(c.expires_at) }}.</p>
       </div>
-      <div class="next-actions"><a class="btn btn-solid" href="/challenges/{{ c.id }}">Prove from my bank</a></div>
+      <div class="next-actions"><a class="btn btn-solid" href="/challenges/{{ c.id }}">{{ t("Prove from my bank") }}</a></div>
     </section>
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty">No open requests. AICTE's officer creates one from the register. In the demo, sign in as the officer and choose "Request bank proof" on a deposit.</div>
+  <div class="empty">{{ t("No open requests. AICTE's officer creates one from the register. In the demo, sign in as the officer and choose \"Request bank proof\" on a deposit.") }}</div>
   {% endif %}
 </section>
 
 <section aria-labelledby="dep-h" style="margin-bottom:36px">
-  <h2 id="dep-h">Registered deposits</h2>
-  <div class="table-wrap"><table><thead><tr><th>FD number</th><th class="num">Principal</th><th>Matures</th><th>Status at AICTE</th><th>Vouched for by</th></tr></thead><tbody>
+  <h2 id="dep-h">{{ t("Registered deposits") }}</h2>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("FD number") }}</th><th class="num">{{ t("Principal") }}</th><th>{{ t("Matures") }}</th><th>{{ t("Status at AICTE") }}</th><th>{{ t("Vouched for by") }}</th></tr></thead><tbody>
     {% for r in rows %}<tr><td><a class="rowlink mono" href="/fdrs/{{ r.f.id }}">{{ r.f.fd_number }}</a></td><td class="num">{{ inr(r.f.principal) }}</td><td>{{ r.f.maturity }}</td><td>{{ status(r.status) }}</td><td>{{ vouch(r) }}</td></tr>{% endfor %}
   </tbody></table></div>
 </section>

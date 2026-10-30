@@ -39,7 +39,7 @@
       <button class="btn btn-solid" type="button" data-open="lift-dlg">Lift hold</button>
     {% elif nxt.kind == 'release_pending' %}
       {% if not nxt.mine %}
-      <form method="post" action="/fdrs/{{ f.id }}/release/approve"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-solid" {% if not gates.approve[0] %}disabled aria-describedby="why-ap"{% endif %}>Approve release</button></form>
+      <form method="post" action="/fdrs/{{ f.id }}/release/approve" class="actions" style="flex-wrap:nowrap"><input type="hidden" name="csrf" value="{{ s.csrf }}">{% if officer_mfa %}<input name="otp" inputmode="numeric" maxlength="6" placeholder="2FA code" aria-label="Authenticator code for step-up" required style="width:110px">{% endif %}<button class="btn btn-solid" {% if not gates.approve[0] %}disabled aria-describedby="why-ap"{% endif %}>Approve release</button></form>
       {% if not gates.approve[0] %}<p class="why" id="why-ap">{{ gates.approve[1] }}</p>{% endif %}
       {% endif %}
       <button class="btn btn-ghost" type="button" data-open="rej-dlg">{{ 'Withdraw proposal' if nxt.mine else 'Reject' }}</button>
@@ -80,6 +80,31 @@
     <button class="btn btn-ghost btn-sm" name="decision" value="object">Object</button>
   </form>
   {% endif %}
+</section>
+{% endif %}
+
+{# ---- encrypted document vault ---- #}
+<section class="panel" id="documents" style="margin-top:20px;padding:20px">
+  <h2 style="margin-top:0">Documents <span class="muted small">encrypted at rest (AES-256-GCM, a key per file), integrity re-checked on every download</span></h2>
+  {% if b.documents %}<div class="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th class="num">Size</th><th>SHA-256</th><th>Uploaded</th><th></th></tr></thead><tbody>
+  {% for d in b.documents %}<tr><td class="small">{{ d.filename }}</td><td class="small">{{ VAULT_KINDS[d.kind] }}</td><td class="num small">{{ (d.size/1024)|round(1) }} KB</td><td class="mono small">{{ d.sha256[:12] }}…</td><td class="small">{{ d.uploaded_by }}, {{ when(d.uploaded_at) }}</td>
+  <td><form method="get" action="/documents/{{ d.id }}" class="actions" style="flex-wrap:nowrap">{% if s.role == 'officer' %}<input name="reason" required minlength="10" maxlength="300" placeholder="Reason for download" aria-label="Reason for downloading {{ d.filename }}">{% endif %}<button class="btn btn-ghost btn-sm">Download</button></form></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted small">No documents yet.</p>{% endif %}
+  <form method="post" action="/fdrs/{{ f.id }}/documents" enctype="multipart/form-data" class="actions" style="margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <select name="kind" aria-label="Document type">{% for k, v in VAULT_KINDS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+    <input type="file" name="file" accept="application/pdf,image/png,image/jpeg" aria-label="Document file">
+    <button class="btn btn-quiet btn-sm">Upload</button>
+  </form>
+</section>
+
+{# ---- evidence tier 3: bank branch confirmation ---- #}
+{% if s.role == 'officer' and not f.released_at and (not latest or latest.decision in ('insufficient_evidence','rejected')) %}
+<section class="panel" id="branch" style="margin-top:20px;padding:20px">
+  <h2 style="margin-top:0">Evidence tier 3: bank branch confirmation</h2>
+  <p class="muted small">If the institution's bank page cannot be proven, ask the bank branch directly. The request goes only to the branch contact in AICTE's reviewed directory, as a signed single-use link (valid 7 days) and a separate one-time code. It is weaker than a bank-session proof and can never override a session proof's Discrepancy.</p>
+  {% if b.branch and b.branch.state == 'sent' %}<p class="note" id="branch-open">Request <span class="mono">{{ b.branch.id }}</span> sent to {{ b.branch.contact }} on {{ when(b.branch.created_at) }}; waiting for the branch. <a href="/mockbank/branch-inbox">Demo: open the branch inbox</a>.</p>
+  {% else %}<form method="post" action="/fdrs/{{ f.id }}/branch/request"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-quiet btn-sm">Request branch confirmation</button></form>{% endif %}
 </section>
 {% endif %}
 

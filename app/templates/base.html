@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang or 'en' }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -19,7 +19,7 @@
       {% if s and s.role == 'officer' %}
         {% set links = [('/register','Register'),('/institutions','Institutions'),('/notifications','Alerts'),('/baseline','Baseline'),('/mockbank','Mock bank'),('/audit','Audit log'),('/system','System'),('/how','How it works')] %}
       {% elif s %}
-        {% set links = [('/portal','My deposits'),('/notifications','Alerts'),('/mockbank','Mock bank'),('/system','System'),('/how','How it works')] %}
+        {% set links = [('/portal',t('My deposits')),('/notifications',t('Alerts')),('/mockbank',t('Mock bank')),('/system',t('System')),('/how',t('How it works'))] %}
       {% else %}
         {% set links = [] %}
       {% endif %}
@@ -27,8 +27,8 @@
     </nav>
     <div class="top-right">
       {% if s %}
-        <div class="who">{% if s.role == 'officer' %}<b>AICTE officer {{ s.who or 'RB-01' }}</b>Regulation Bureau{% else %}<b>Institution</b>{{ s.inst }}{% endif %}</div>
-        <form method="post" action="/signout"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost btn-sm">Sign out</button></form>
+        <div class="who">{% if s.role == 'officer' %}<b>AICTE officer {{ s.who or 'RB-01' }}</b><a href="/account/mfa" class="small">Regulation Bureau · 2FA</a>{% else %}<b>{{ t('Institution') }}</b>{{ s.inst }} · <a class="small" id="lang-toggle" href="/lang/{{ 'en' if lang == 'hi' else 'hi' }}">{{ 'English' if lang == 'hi' else 'हिन्दी' }}</a>{% endif %}</div>
+        <form method="post" action="/signout"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost btn-sm">{{ t('Sign out') }}</button></form>
       {% else %}
         <a class="btn btn-ghost btn-sm" href="/how">How it works</a>
         <a class="btn btn-solid btn-sm" href="/signin">Start the demo</a>

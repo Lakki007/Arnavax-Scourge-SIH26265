@@ -1,0 +1,10 @@
+{
+  "_comment": "Operator-reviewed bank branch directory. Confirmation requests go ONLY to these contacts, never to an address the institution supplies. SYNTHETIC entries for the demo.",
+  "netbanking.mockbank.test": {
+    "bank": "Mock Bank (synthetic)",
+    "branches": [
+      {"code": "MOCK0000042", "name": "Hyderabad Main Branch", "contact": "fd-desk.hyderabad@mockbank.test"},
+      {"code": "MOCK0000077", "name": "Pune Camp Branch", "contact": "fd-desk.pune@mockbank.test"}
+    ]
+  }
+}
