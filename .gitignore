@@ -7,3 +7,9 @@ __pycache__/
 *.db-shm
 *.db-wal
 var_unit/
+
+# real-bank field test: build tree and live session files (never commit)
+.tlsn/
+tools/realbank/headers.txt
+tools/realbank/body.txt
+.DS_Store
