@@ -209,7 +209,8 @@ def fdr_status(fdr, evidence_rows, actions, open_challenge):
     acts = [a for a in actions if a["evidence_id"] == latest["id"]]
     if any(a["action"] == "escalate" for a in acts):
         return "escalated", "Escalated", LABEL[latest["decision"]]
-    if latest["decision"] == "verified":
+    if latest["decision"] == "verified" or (latest["decision"] == "insufficient_evidence" and any(a["action"] == "accept" for a in acts)):
+        # the second case is only reachable when the gap was closed by a verified bank-signed e-advice (see main.eadvice_state)
         if any(a["action"] == "accept" for a in acts):
             age_days = (time.time() - latest["received_at"]) / 86400
             if age_days > DEMO["confirmation_valid_days"]:

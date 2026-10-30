@@ -1,6 +1,7 @@
 """Scourge portal: FastAPI + SQLite + server-rendered pages.
 Officer journey: register FDR -> request bank proof -> evidence -> accept / escalate -> release gate.
 Institution journey: open challenge -> prove from bank (real MPC-TLS prover, synthetic bank in demo) -> result."""
+import base64
 import csv
 import hashlib
 import hmac
@@ -18,8 +19,8 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, jobs, policy, procs, seed, views
-from .settings import ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
+from . import auth, db, eadvice, jobs, policy, procs, seed, views
+from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
 HERE = Path(__file__).parent
 app = FastAPI(title="Scourge", docs_url=None, redoc_url=None, openapi_url=None)
@@ -81,8 +82,42 @@ def fdr_bundle(fid, _depth=0):
             st = ("renewed", "Renewed", f"into {succ['id']}, confirmed by the bank")
     if st == base and rel and base[0] == "confirmed":
         st = ("release_pending", "Release proposed", f"by {rel['proposed_by']}; needs a second officer")
-    return {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st, "base_status": base,
-            "release_request": rel, "predecessor": pred, "successor": succ}
+    hold = db.q1("SELECT * FROM holds WHERE fdr_id=? AND lifted_at IS NULL ORDER BY id DESC", (fid,))
+    if hold and base[0] != "released" and st[0] != "renewed":
+        st = ("on_hold", "On hold", hold["reason"][:80])
+    b = {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st, "base_status": base,
+         "release_request": rel, "predecessor": pred, "successor": succ, "hold": hold}
+    b["eadvice"] = eadvice_state(b)
+    return b
+
+
+def eadvice_state(b):
+    """Field-level fallback. If the latest session proof was Insufficient evidence, a verified bank-signed
+    e-advice uploaded after it may fill ONLY the fields the proof could not show. Returns None or
+    {row, decision, match, filled} where decision is what the policy says with those fields filled in."""
+    latest = b["evidence"][0] if b["evidence"] else None
+    if not latest:
+        return None
+    row = db.q1("SELECT * FROM eadvices WHERE fdr_id=? AND evidence_id=? ORDER BY id DESC", (b["f"]["id"], latest["id"]))
+    if not row:
+        return None
+    out = {"row": row, "decision": None, "match": {}, "filled": []}
+    if not row["ok"] or latest["decision"] != "insufficient_evidence":
+        return out
+    facts = json.loads(latest["facts_json"])
+    if facts.get("gate") not in ("facts_ok",):
+        return out  # only a readable deposit record with gaps can be completed; a rejected proof cannot
+    fields = {k: dict(v) for k, v in facts.get("fields", {}).items()}
+    adv = json.loads(row["fields_json"])
+    for k, v in adv.items():
+        if fields.get(k, {}).get("state") != "proven":
+            fields[k] = {"state": "proven", "value": v}
+            out["filled"].append(k)
+    if not out["filled"]:
+        return out
+    d, m = policy.apply({"gate": "facts_ok", "fields": fields}, b["f"])
+    out["decision"], out["match"] = d, m
+    return out
 
 
 def challenge_live(c):
@@ -246,7 +281,7 @@ def monitor(allr, today=None):
             out["maturing"].append((r, days))
         if st in ("submitted", "stale", "insufficient_evidence", "rejected"):
             out["recheck"].append((r, days))
-        if st in ("discrepancy", "escalated"):
+        if st in ("discrepancy", "escalated", "on_hold"):
             out["flagged"].append((r, days))
     out["warn_days"] = warn
     return out
@@ -413,7 +448,11 @@ def action_gates(b):
     elif decided:
         g["accept"] = g["escalate"] = (False, "The latest evidence already has an officer decision.")
     else:
-        g["accept"] = (True, "") if latest["decision"] == "verified" else (False, "Only verified evidence can be accepted.")
+        ea = b.get("eadvice")
+        if latest["decision"] == "verified" or (ea and ea["decision"] == "verified"):
+            g["accept"] = (True, "")
+        else:
+            g["accept"] = (False, "Only verified evidence can be accepted.")
         g["escalate"] = (True, "") if latest["decision"] != "verified" else (False, "Verified evidence does not need escalation.")
     st = b["base_status"][0]
     rel = b.get("release_request")
@@ -423,6 +462,8 @@ def action_gates(b):
         g["release"] = (False, f"Renewed into {b['successor']['id']}: the renewed deposit is the one held now.")
     elif st != "confirmed":
         g["release"] = (False, f"Release needs an accepted bank-session confirmation from the last {DEMO['confirmation_valid_days']} days. Current status: {b['base_status'][1]}.")
+    elif b.get("hold"):
+        g["release"] = (False, f"On hold: {b['hold']['reason']}. Lift the hold first.")
     elif rel:
         g["release"] = (False, f"A release is already proposed by {rel['proposed_by']} and awaits a second officer.")
     else:
@@ -434,6 +475,8 @@ def action_gates(b):
         g["reject"] = (True, "")
         if f["released_at"]:
             g["approve"] = (False, "Already released.")
+        elif b.get("hold"):
+            g["approve"] = (False, f"On hold: {b['hold']['reason']}. Lift the hold first.")
         elif st != "confirmed":
             g["approve"] = (False, f"The bank confirmation is no longer current ({b['base_status'][1]}). Reject, or request a fresh proof.")
         else:
@@ -498,6 +541,9 @@ def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(
              (fid, latest["id"], who, now, note[:500], "pending"))
         db.event(f"officer:{who}", "release_proposed", fid, evidence_id=latest["id"], note=note[:500])
         return RedirectResponse(f"/fdrs/{fid}", 303)
+    ea = b.get("eadvice")
+    if action == "accept" and latest["decision"] != "verified" and ea:
+        note = (note + " " if note else "") + f"[completed by bank-signed e-advice #{ea['row']['id']}: {', '.join(ea['filled'])}]"
     db.x("INSERT INTO actions(fdr_id,evidence_id,action,note,actor,at) VALUES(?,?,?,?,?,?)", (fid, evidence_id, action, note[:500], "officer", now))
     db.event("officer", f"officer_{action}", fid, evidence_id=evidence_id, note=note[:500], officer=who)
     return RedirectResponse(f"/fdrs/{fid}", 303)
@@ -514,10 +560,17 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
     if who == rel["proposed_by"]:
         raise HTTPException(409, "Maker-checker: the officer who proposed a release cannot approve it. Sign in as another officer.")
     letter = f"AICTE/RB/REL/{datetime.utcfromtimestamp(now).year}/{rel['id']:04d}"
+    f = b["f"]
+    signed = {"type": "aicte-pledge-release/v1", "letter_no": letter, "fdr_id": fid, "fd_number": f["fd_number"],
+              "bank_host": f["bank_host"], "institution_id": f["institution_id"], "principal": f["principal"],
+              "proposed_by": rel["proposed_by"], "approved_by": who, "bank_proof_evidence_id": rel["evidence_id"],
+              "approved_at": int(now)}
+    signed_json = json.dumps(signed, sort_keys=True, separators=(",", ":"))
+    signature = base64.b64encode(AICTE_SIGNING_KEY.sign(signed_json.encode())).decode()
 
     def work(c):
-        n = c.execute("UPDATE release_requests SET state='approved', decided_by=?, decided_at=?, decision_note=?, letter_no=? WHERE id=? AND state='pending'",
-                      (who, now, note.strip()[:500], letter, rel["id"])).rowcount
+        n = c.execute("UPDATE release_requests SET state='approved', decided_by=?, decided_at=?, decision_note=?, letter_no=?, signed_json=?, signature=? WHERE id=? AND state='pending'",
+                      (who, now, note.strip()[:500], letter, signed_json, signature, rel["id"])).rowcount
         if n != 1:
             raise HTTPException(409, "This release was already decided.")
         c.execute("INSERT INTO actions(fdr_id,evidence_id,action,note,actor,at) VALUES(?,?,?,?,?,?)",
@@ -556,6 +609,124 @@ def release_letter(request: Request, fid: str):
     e = db.q1("SELECT * FROM evidence WHERE id=?", (rel["evidence_id"],))
     ev = db.q1("SELECT hash FROM events WHERE kind='release_approved' AND fdr_id=? ORDER BY id DESC", (fid,))
     return render(request, "release_letter.html", s, b=b, f=b["f"], rel=rel, e=e, audit_hash=(ev or {}).get("hash"))
+
+
+def _aicte_public_pem():
+    from cryptography.hazmat.primitives import serialization
+    return AICTE_SIGNING_KEY.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
+
+
+@app.get("/api/aicte-release-key")
+def aicte_release_key():
+    """AICTE's public key for checking signed release letters offline (Ed25519). Public by design."""
+    return PlainTextResponse(_aicte_public_pem())
+
+
+@app.get("/fdrs/{fid}/release-letter.json")
+def release_letter_json(request: Request, fid: str):
+    """Signed, machine-checkable pledge-release instruction: a bank can verify it offline with AICTE's public key."""
+    s = auth.require(request)
+    get_fdr_or_404(s, fid)
+    rel = db.q1("SELECT * FROM release_requests WHERE fdr_id=? AND state='approved' ORDER BY id DESC", (fid,))
+    if not rel or not rel["signed_json"]:
+        raise HTTPException(404, "No signed release for this FDR.")
+    body = {"payload": json.loads(rel["signed_json"]), "signed_bytes": rel["signed_json"], "signature_b64": rel["signature"],
+            "algorithm": "Ed25519", "public_key_pem": _aicte_public_pem()}
+    return Response(json.dumps(body, indent=2), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{rel["letter_no"].replace("/", "_")}.json"'})
+
+
+# ----------------------------------------------------------------- regulatory hold
+@app.post("/fdrs/{fid}/hold")
+def place_hold(request: Request, fid: str, csrf: str = Form(""), reason: str = Form("")):
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    if b["f"]["released_at"]:
+        raise HTTPException(409, "Already released.")
+    if b["hold"]:
+        raise HTTPException(409, "A hold is already active.")
+    reason = reason.strip()
+    if len(reason) < 10:
+        raise HTTPException(422, "Give a reason of at least 10 characters (e.g. the pending case or grievance).")
+    who = auth.officer_id(s)
+    db.x("INSERT INTO holds(fdr_id,placed_by,placed_at,reason) VALUES(?,?,?,?)", (fid, who, time.time(), reason[:300]))
+    db.event(f"officer:{who}", "hold_placed", fid, reason=reason[:300])
+    return RedirectResponse(f"/fdrs/{fid}", 303)
+
+
+@app.post("/fdrs/{fid}/hold/lift")
+def lift_hold(request: Request, fid: str, csrf: str = Form(""), note: str = Form("")):
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    if not b["hold"]:
+        raise HTTPException(409, "No active hold.")
+    note = note.strip()
+    if len(note) < 10:
+        raise HTTPException(422, "Record why the hold is lifted (at least 10 characters).")
+    who = auth.officer_id(s)
+    db.x("UPDATE holds SET lifted_by=?, lifted_at=?, lift_note=? WHERE id=?", (who, time.time(), note[:300], b["hold"]["id"]))
+    db.event(f"officer:{who}", "hold_lifted", fid, hold=b["hold"]["id"], note=note[:300])
+    return RedirectResponse(f"/fdrs/{fid}", 303)
+
+
+# ----------------------------------------------------------------- field-level fallback: bank-signed e-advice
+def _bank_cert_files(host):
+    """The synthetic bank's e-advice signing key (demo only): the same test-CA identity as its TLS server."""
+    for b_ in DEMO["banks"].values():
+        if b_["host"] == host and b_["cert"].endswith("bank_ok.der"):
+            return ROOT / "certs" / "bank_ok.key.pem", ROOT / "certs" / "bank_ok.pem"
+    return None
+
+
+@app.get("/mockbank/eadvice/{fd_number}")
+def mockbank_eadvice(request: Request, fd_number: str):
+    """SYNTHETIC bank e-advice desk: what the institution would download from its real bank."""
+    s = auth.require(request)
+    st = seed.read_bank_state()
+    for cid, c in st["customers"].items():
+        for d in c["deposits"]:
+            if d["fd_number"] != fd_number:
+                continue
+            if s["role"] == "institution" and cid != s["inst"]:
+                raise HTTPException(403, "Not your deposit.")
+            host = VERIFIER_CFG["allow_hosts"][0]
+            files = _bank_cert_files(host)
+            p = float(d["principal"])
+            lien = f"LOAN {p * 0.85:.2f} AGAINST DEPOSIT" if d["behaviour"] == "lien_loan" else d["lien"]
+            status = "CLOSED" if d["behaviour"] == "closed" else "ACTIVE"
+            doc = eadvice.issue(host, fd_number, {"status": status, "lien": lien, "holders": d["holders"]},
+                                files[0].read_bytes(), files[1].read_bytes())
+            db.event(auth.actor(s), "eadvice_issued_by_mock_bank", None, fd_number=fd_number)
+            return Response(json.dumps(doc, indent=2), media_type="application/json",
+                            headers={"Content-Disposition": f'attachment; filename="e-advice_{fd_number}.json"'})
+    raise HTTPException(404, "That deposit does not exist at the mock bank.")
+
+
+@app.post("/fdrs/{fid}/eadvice")
+async def upload_eadvice(request: Request, fid: str, csrf: str = Form(""), file: UploadFile = File(None)):
+    s = auth.require(request)
+    auth.check_csrf(s, csrf)
+    b = get_fdr_or_404(s, fid)
+    latest = b["evidence"][0] if b["evidence"] else None
+    if not latest or latest["decision"] != "insufficient_evidence":
+        raise HTTPException(409, "An e-advice is only used to complete a bank-session proof that ended as Insufficient evidence.")
+    if file is None or not file.filename:
+        raise HTTPException(422, "Choose the signed e-advice file from your bank.")
+    data = await file.read(64 * 1024 + 1)
+    if len(data) > 64 * 1024:
+        raise HTTPException(422, "That file is too large for an e-advice (limit 64 KB).")
+    try:
+        doc = json.loads(data)
+    except Exception:
+        doc = {}
+    ca = (ROOT / VERIFIER_CFG["trust"]["ca_der"]).read_bytes()
+    r = eadvice.verify(doc, b["f"], ca, VERIFIER_CFG["allow_hosts"])
+    db.x("INSERT INTO eadvices(fdr_id,evidence_id,uploaded_at,actor,ok,reason,fields_json,signer,issued_at,sha256) VALUES(?,?,?,?,?,?,?,?,?,?)",
+         (fid, latest["id"], time.time(), auth.actor(s), 1 if r["ok"] else 0, r["reason"], json.dumps(r["fields"]), r["signer"], r["issued_at"],
+          hashlib.sha256(data).hexdigest()))
+    db.event(auth.actor(s), "eadvice_verified" if r["ok"] else "eadvice_rejected", fid, evidence_id=latest["id"], reason=r["reason"],
+             fields=sorted(r["fields"]))
+    return RedirectResponse(f"/fdrs/{fid}#eadvice", 303)
 
 
 # ----------------------------------------------------------------- evidence

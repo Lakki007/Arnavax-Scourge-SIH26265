@@ -35,6 +35,8 @@
     {% elif nxt.kind == 'escalate' %}
       <button class="btn btn-danger" type="button" data-open="esc-dlg">Escalate</button>
       <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost">Request bank proof</button></form>
+    {% elif nxt.kind == 'hold' %}
+      <button class="btn btn-solid" type="button" data-open="lift-dlg">Lift hold</button>
     {% elif nxt.kind == 'release_pending' %}
       {% if not nxt.mine %}
       <form method="post" action="/fdrs/{{ f.id }}/release/approve"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-solid" {% if not gates.approve[0] %}disabled aria-describedby="why-ap"{% endif %}>Approve release</button></form>
@@ -60,6 +62,31 @@
 {% if latest and latest.decision == 'rejected' %}<p class="note note-bad" style="margin-top:16px"><b>The latest proof was rejected:</b> {{ reason }} Nothing it contained is treated as the bank's word.</p>{% endif %}
 {% if latest and latest.decision == 'insufficient_evidence' and reason %}<p class="note note-warn" style="margin-top:16px"><b>Not enough to decide:</b> {{ reason }}</p>{% endif %}
 
+{# ---- field-level fallback: bank-signed e-advice ---- #}
+{% if latest and latest.decision == 'insufficient_evidence' %}
+<section class="panel" id="eadvice" style="margin-top:20px;padding:20px">
+  <h2 style="margin-top:0">Field-level fallback: bank-signed e-advice</h2>
+  <p class="muted small">The bank's page did not show every required field. A digitally signed e-advice from the bank can fill <b>only</b> the missing fields. Scourge checks the bank's certificate, the signature, the FD number and that it is less than 30 days old.</p>
+  {% set ea = b.eadvice %}
+  {% if ea and ea.row %}
+    {% if ea.row.ok %}
+      <p class="note {{ 'note-good' if ea.decision == 'verified' else 'note-bad' if ea.decision == 'discrepancy' else 'note-warn' }}" id="eadvice-result"><b>E-advice verified</b> (signed by {{ ea.row.signer }}, {{ when(ea.row.issued_at) }}).
+      {% if ea.filled %} Fills: {{ ea.filled|join(', ') }}. With it, the result is <b>{{ LABEL.get(ea.decision, ea.decision) }}</b>.{% else %} It adds nothing the proof had not already shown.{% endif %}</p>
+    {% else %}
+      <p class="note note-bad" id="eadvice-result"><b>E-advice rejected:</b> {{ ea.row.reason }}</p>
+    {% endif %}
+  {% endif %}
+  {% if s.role == 'institution' or s.role == 'officer' %}
+  <form method="post" action="/fdrs/{{ f.id }}/eadvice" enctype="multipart/form-data" class="actions" style="margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <input type="file" name="file" accept="application/json,.json" aria-label="Signed e-advice file">
+    <button class="btn btn-quiet btn-sm">Upload and verify</button>
+    <a class="btn btn-ghost btn-sm" href="/mockbank/eadvice/{{ f.fd_number }}">Get e-advice from the (synthetic) bank</a>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
 {# ---- the receipt ---- #}
 {% if rc %}
 <div class="sec">
@@ -71,6 +98,10 @@
 {% endif %}
 
 {# ---- secondary material, folded ---- #}
+{% if s.role == 'officer' and not f.released_at and not b.hold %}
+<p class="small" style="margin-top:16px"><button class="btn btn-ghost btn-sm" type="button" data-open="hold-dlg">Place regulatory hold</button> <span class="muted">Freezes release while a grievance, court case or dues are pending.</span></p>
+{% endif %}
+{% if b.hold %}<div class="note note-warn" style="margin-top:16px" id="hold-note"><b>On hold</b> by {{ b.hold.placed_by }}: {{ b.hold.reason }}. Release is frozen.</div>{% endif %}
 <div class="folds">
   <details class="fold">
     <summary>Registered details <span class="muted small">FDR {{ f.id }}, registered {{ when(f.created_at) }}</span></summary>
@@ -141,5 +172,25 @@
     <div class="actions"><button class="btn btn-danger">{{ 'Withdraw' if nxt.mine else 'Reject' }}</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
   </form>
 </dialog>
+{% endif %}
+{% if s.role == 'officer' %}
+<dialog id="hold-dlg" aria-labelledby="hold-title">
+  <h2 id="hold-title">Place a regulatory hold on {{ f.fd_number }}</h2>
+  <form method="post" action="/fdrs/{{ f.id }}/hold">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="field"><label for="hold-reason">Reason (at least 10 characters)</label><textarea id="hold-reason" name="reason" rows="2" minlength="10" required placeholder="e.g. Faculty salary grievance pending before the Regional Office"></textarea></div>
+    <div class="actions"><button class="btn btn-danger">Place hold</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
+  </form>
+</dialog>
+{% if b.hold %}
+<dialog id="lift-dlg" aria-labelledby="lift-title">
+  <h2 id="lift-title">Lift the hold on {{ f.fd_number }}</h2>
+  <form method="post" action="/fdrs/{{ f.id }}/hold/lift">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="field"><label for="lift-note">Why it is lifted (at least 10 characters)</label><textarea id="lift-note" name="note" rows="2" minlength="10" required></textarea></div>
+    <div class="actions"><button class="btn btn-solid">Lift hold</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
+  </form>
+</dialog>
+{% endif %}
 {% endif %}
 {% endblock %}

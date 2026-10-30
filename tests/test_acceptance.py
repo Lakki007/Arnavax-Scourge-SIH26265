@@ -570,3 +570,85 @@ def test_renewal_links_old_and_new_fdr(off):
     assert "Renewed" in off.get("/fdrs/FDR-001").text
     eid_old = db().execute("SELECT COALESCE(MAX(id),0) FROM evidence WHERE fdr_id='FDR-001'").fetchone()[0]
     assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid_old), note="should not release old").status_code == 409
+
+
+def _upload_eadvice(sess, fdr, doc):
+    return sess.c.post(f"/fdrs/{fdr}/eadvice", data={"csrf": sess.csrf},
+                       files={"file": ("e-advice.json", json.dumps(doc).encode(), "application/json")})
+
+
+def test_eadvice_fallback_completes_missing_lien(off):
+    j, cid = prove(off, "FDR-002", "no_lien")
+    assert j["decision"] == "insufficient_evidence"
+    inst = S("institution:INST-42")
+    bank(off, "FDR-002", "active")                                      # the bank's e-advice desk reports the true lien
+    doc = inst.get(f"/mockbank/eadvice/{FD['FDR-002']}").json()
+    assert _upload_eadvice(inst, "FDR-002", doc).status_code == 303
+    page = off.get("/fdrs/FDR-002").text
+    assert "E-advice verified" in page and "Fills: lien" in page
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    assert off.post("/fdrs/FDR-002/decide", action="accept", evidence_id=str(eid)).status_code == 303
+    assert "Confirmed by bank session" in off.get("/fdrs/FDR-002").text
+    note = db().execute("SELECT note FROM actions WHERE fdr_id='FDR-002' AND action='accept'").fetchone()[0]
+    assert "bank-signed e-advice" in note
+
+
+def test_eadvice_showing_a_loan_is_a_discrepancy_not_acceptable(off):
+    j, cid = prove(off, "FDR-002", "no_lien")
+    inst = S("institution:INST-42")
+    bank(off, "FDR-002", "lien_loan")
+    doc = inst.get(f"/mockbank/eadvice/{FD['FDR-002']}").json()
+    assert "LOAN" in doc["payload"]["fields"]["lien"]
+    _upload_eadvice(inst, "FDR-002", doc)
+    assert "the result is <b>Discrepancy</b>" in off.get("/fdrs/FDR-002").text
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    assert off.post("/fdrs/FDR-002/decide", action="accept", evidence_id=str(eid)).status_code == 409
+
+
+def test_forged_or_altered_eadvice_is_rejected(off):
+    from cryptography.hazmat.primitives import serialization  # noqa: F401
+    j, cid = prove(off, "FDR-002", "no_lien")
+    inst = S("institution:INST-42")
+    bank(off, "FDR-002", "lien_loan")
+    doc = inst.get(f"/mockbank/eadvice/{FD['FDR-002']}").json()
+    doc["payload"]["fields"]["lien"] = "AICTE NEW DELHI (SECURITY DEPOSIT)"   # institution edits out the loan
+    _upload_eadvice(inst, "FDR-002", doc)
+    assert "E-advice rejected" in off.get("/fdrs/FDR-002").text and "altered or forged" in off.get("/fdrs/FDR-002").text
+    # signed by the institution's own fake CA instead of a trusted bank root
+    import sys; sys.path.insert(0, ROOT)
+    from app import eadvice as ea
+    fake = ea.issue("netbanking.mockbank.test", FD["FDR-002"], {"lien": "AICTE NEW DELHI"},
+                    open(os.path.join(ROOT, "certs/bank_fake.key.pem"), "rb").read(), open(os.path.join(ROOT, "certs/bank_fake.pem"), "rb").read())
+    _upload_eadvice(inst, "FDR-002", fake)
+    assert "not issued by a trusted bank root" in off.get("/fdrs/FDR-002").text
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    assert off.post("/fdrs/FDR-002/decide", action="accept", evidence_id=str(eid)).status_code == 409
+
+
+def test_regulatory_hold_freezes_release(off):
+    eid = _confirmed(off)
+    assert off.post("/fdrs/FDR-001/hold", reason="short").status_code == 422
+    assert off.post("/fdrs/FDR-001/hold", reason="Faculty salary grievance pending at RO").status_code == 303
+    assert "On hold" in off.get("/fdrs/FDR-001").text
+    assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0150 term completed").status_code == 409
+    assert off.post("/fdrs/FDR-001/hold/lift", note="Grievance resolved, RO letter 12/2026").status_code == 303
+    assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0150 term completed").status_code == 303
+    off.post("/fdrs/FDR-001/hold", reason="New court case filed against the trust")
+    assert S("officer:RB-02").post("/fdrs/FDR-001/release/approve").status_code == 409   # hold also blocks approval
+
+
+def test_release_letter_is_signed_and_verifiable_offline(off):
+    import base64 as b64
+    from cryptography.hazmat.primitives import serialization
+    eid = _confirmed(off)
+    off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0160 term completed")
+    rb2 = S("officer:RB-02")
+    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
+    body = rb2.get("/fdrs/FDR-001/release-letter.json").json()
+    pub = serialization.load_pem_public_key(httpx.get(B + "/api/aicte-release-key").text.encode())
+    pub.verify(b64.b64decode(body["signature_b64"]), body["signed_bytes"].encode())          # raises if invalid
+    assert body["payload"]["approved_by"] == "RB-02" and body["payload"]["proposed_by"] == "RB-01"
+    import pytest as _p
+    from cryptography.exceptions import InvalidSignature
+    with _p.raises(InvalidSignature):
+        pub.verify(b64.b64decode(body["signature_b64"]), body["signed_bytes"].replace("RB-02", "RB-01").encode())

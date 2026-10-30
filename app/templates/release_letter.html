@@ -13,9 +13,10 @@
     <dt>Bank confirmation</dt><dd>Bank-session proof #{{ e.id }} of {{ when(e.received_at) }}: {{ LABEL[e.decision] }}</dd>
     <dt>Proposed by</dt><dd>Officer {{ rel.proposed_by }}, {{ when(rel.proposed_at) }}: “{{ rel.note }}”</dd>
     <dt>Approved by</dt><dd>Officer {{ rel.decided_by }}{% if rel.decision_note %}: “{{ rel.decision_note }}”{% endif %}</dd>
+    {% if rel.signature %}<dt>AICTE digital signature</dt><dd class="mono small" style="word-break:break-all">Ed25519 · {{ rel.signature }}</dd>{% endif %}
     {% if audit_hash %}<dt>Audit entry hash</dt><dd class="mono small" style="word-break:break-all">{{ audit_hash }}</dd>{% endif %}
   </dl>
-  <p class="small muted" style="margin-top:24px">This release was approved by two different officers against a current bank-session confirmation. The audit hash lets anyone check that this record is unchanged in AICTE's hash-chained log.</p>
-  <div class="actions" style="margin-top:20px"><button class="btn btn-ghost" onclick="window.print()">Print</button><a class="btn btn-quiet" href="/fdrs/{{ f.id }}">Back to {{ f.id }}</a></div>
+  <p class="small muted" style="margin-top:24px">This release was approved by two different officers against a current bank-session confirmation. The audit hash lets anyone check that this record is unchanged in AICTE's hash-chained log. The signed JSON is AICTE's pledge-release instruction to the bank: the bank can verify it offline with AICTE's public key (<a href="/api/aicte-release-key">/api/aicte-release-key</a>).</p>
+  <div class="actions" style="margin-top:20px"><button class="btn btn-ghost" onclick="window.print()">Print</button>{% if rel.signature %}<a class="btn btn-quiet" href="/fdrs/{{ f.id }}/release-letter.json">Download signed instruction (JSON)</a>{% endif %}<a class="btn btn-quiet" href="/fdrs/{{ f.id }}">Back to {{ f.id }}</a></div>
 </article>
 {% endblock %}

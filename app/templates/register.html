@@ -32,7 +32,7 @@
     <label for="status">Status</label>
     <select id="status" name="status">
       <option value="">All statuses</option>
-      {% for k, lab in [('submitted','Submitted by institution'),('requested','Proof requested'),('verified','Verified, awaiting officer'),('confirmed','Confirmed by bank session'),('discrepancy','Discrepancy'),('insufficient_evidence','Insufficient evidence'),('rejected','Rejected'),('escalated','Escalated'),('stale','Confirmation expired'),('release_pending','Release proposed'),('renewed','Renewed'),('released','Released')] %}
+      {% for k, lab in [('submitted','Submitted by institution'),('requested','Proof requested'),('verified','Verified, awaiting officer'),('confirmed','Confirmed by bank session'),('discrepancy','Discrepancy'),('insufficient_evidence','Insufficient evidence'),('rejected','Rejected'),('escalated','Escalated'),('stale','Confirmation expired'),('on_hold','On hold'),('release_pending','Release proposed'),('renewed','Renewed'),('released','Released')] %}
       <option value="{{ k }}" {% if fstatus == k %}selected{% endif %}>{{ lab }} ({{ counts.get(k, 0) }})</option>
       {% endfor %}
     </select>

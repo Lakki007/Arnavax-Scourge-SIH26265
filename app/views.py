@@ -1,3 +1,4 @@
+import time
 """View models for the two mechanism-specific representations:
   1. the receipt: one bank response, as the institution received it vs as AICTE received it
   2. claim vs witness: the register's claim beside the bank server's authenticated values
@@ -121,6 +122,10 @@ def next_action(b, gates, who=None):
         sc = b["successor"]
         return {"kind": "done", "title": f"Renewed into {sc['id']}",
                 "text": f"The renewed deposit {sc['fd_number']} is confirmed by the bank and is the one AICTE now holds."}
+    if b.get("hold"):
+        h = b["hold"]
+        return {"kind": "hold", "title": f"On hold since {time.strftime('%d %b %Y', time.localtime(h['placed_at']))}",
+                "text": f"Placed by {h['placed_by']}: {h['reason']}. Proofs continue; release is frozen until the hold is lifted."}
     rel = b.get("release_request")
     if rel:
         mine = who == rel["proposed_by"]
@@ -138,6 +143,10 @@ def next_action(b, gates, who=None):
         return {"kind": "waiting", "title": f"Waiting for {b['f']['institution_id']} to prove it",
                 "text": "The institution answers from its own net-banking session. The challenge is single use and expires."}
     if gates["accept"][0]:
+        ea = b.get("eadvice")
+        if ea and ea.get("decision") == "verified" and b["evidence"][0]["decision"] != "verified":
+            return {"kind": "accept", "title": "Confirmed with a bank-signed e-advice for " + ", ".join(ea["filled"]),
+                    "text": "The session proof showed everything except these fields; the bank's signed e-advice covers them. Accept to confirm."}
         return {"kind": "accept", "title": "The bank's server confirms the claim",
                 "text": "Accept to record a bank-session confirmation. Release becomes possible."}
     if gates["escalate"][0]:

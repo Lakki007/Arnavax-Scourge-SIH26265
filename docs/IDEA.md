@@ -150,7 +150,7 @@ sequenceDiagram
 | Hide the lien line, or withhold part of the record | Required field missing / partial disclosure | Insufficient evidence |
 | Prove a different, clean FD | FD number differs from the challenged one | Rejected |
 
-If a bank's page never shows liens, Scourge reports *Insufficient evidence* for that field and AICTE asks for a bank letter for that field only. It never guesses, and it never says Verified on incomplete evidence.
+If a bank's page never shows a required field (often the lien), the institution uploads a **bank-signed e-advice** (built: `app/eadvice.py`). Scourge verifies the signing certificate against trusted bank roots, the bank host, the signature over the canonical payload, the FD number and that it is under 30 days old, then uses it for the missing fields only. An edited or self-signed e-advice is rejected; one that shows a loan makes the result a Discrepancy. It never guesses, and it never says Verified on incomplete evidence.
 
 ---
 
@@ -175,7 +175,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | **2 Prove** | Single-use challenge → bank-session proof → verdict with byte-level evidence |
 | **3 Monitor** | Register "Needs attention" panel: bank contradicts paper, matured but not released, maturing within 90 days, re-check due (no confirmation in the last 30 days) |
 | **4 Decide** | Officer accept / escalate; evidence exportable as JSON; audit log that is append-only **and hash-chained** (each entry carries the SHA-256 of the previous one; the Audit page re-verifies the whole chain and pinpoints the first altered entry; CSV export includes the hashes) |
-| **5 Release** | **Maker-checker:** one officer proposes, a different officer approves; approval is blocked unless an accepted bank confirmation is less than 30 days old; approval issues a release letter carrying its audit-entry hash |
+| **5 Release** | **Maker-checker:** one officer proposes, a different officer approves; approval is blocked unless an accepted bank confirmation is less than 30 days old; approval issues a release letter carrying its audit-entry hash and an **AICTE Ed25519 signature** (downloadable JSON the bank can verify offline with `/api/aicte-release-key`). **Regulatory holds** (pending grievance, court case, dues) freeze proposal and approval until lifted with a recorded reason |
 
 ---
 
@@ -187,7 +187,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Data per proof | about 39 MB between prover and verifier | Measured |
 | Bad deposits caught | 119 / 119 (an upload-and-approve baseline approved all 119) | Measured, 180 fresh synthetic deposits |
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
-| Automated tests | 106 pass, 2 deployment-only skipped | Local run |
+| Automated tests | 111 pass, 2 deployment-only skipped | Local run |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages, **not** logged-in FD pages |
 | Software licence cost | ₹0 | Estimate |
 

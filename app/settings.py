@@ -34,6 +34,20 @@ def _secret(name: str, nbytes: int = 32) -> str:
 INTERNAL_KEY = os.environ.get("SCOURGE_INTERNAL_KEY") or _secret("internal.key")
 SESSION_KEY = os.environ.get("SCOURGE_SESSION_KEY") or _secret("session.key")
 
+def _aicte_signing_key():
+    """Ed25519 key AICTE uses to sign release letters (generated on first run; demo key)."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization
+    p = VAR / "aicte_release_signing.key"
+    if not p.exists():
+        k = Ed25519PrivateKey.generate()
+        p.write_bytes(k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+        os.chmod(p, 0o600)
+    return serialization.load_pem_private_key(p.read_bytes(), password=None)
+
+
+AICTE_SIGNING_KEY = _aicte_signing_key()
+
 UPLOAD_MAX_BYTES = 2 * 1024 * 1024
 UPLOAD_TYPES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff", "application/pdf": b"%PDF-"}
 

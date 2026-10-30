@@ -43,7 +43,14 @@ CREATE TABLE IF NOT EXISTS release_requests(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER NOT NULL,
   proposed_by TEXT NOT NULL, proposed_at REAL NOT NULL, note TEXT NOT NULL,
   state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn')),
-  decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT);
+  decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT, signed_json TEXT, signature TEXT);
+CREATE TABLE IF NOT EXISTS eadvices(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER,
+  uploaded_at REAL NOT NULL, actor TEXT NOT NULL, ok INTEGER NOT NULL, reason TEXT, fields_json TEXT NOT NULL,
+  signer TEXT, issued_at REAL, sha256 TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS holds(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), placed_by TEXT NOT NULL,
+  placed_at REAL NOT NULL, reason TEXT NOT NULL, lifted_by TEXT, lifted_at REAL, lift_note TEXT);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 """
@@ -75,6 +82,10 @@ def _migrate(c):
     for col in ("prev_hash", "hash"):
         if col not in cols:
             c.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
+    rcols = {r[1] for r in c.execute("PRAGMA table_info(release_requests)")}
+    for col in ("signed_json", "signature"):
+        if col not in rcols:
+            c.execute(f"ALTER TABLE release_requests ADD COLUMN {col} TEXT")
     if "renews_fdr_id" not in {r[1] for r in c.execute("PRAGMA table_info(fdrs)")}:
         c.execute("ALTER TABLE fdrs ADD COLUMN renews_fdr_id TEXT")
 
