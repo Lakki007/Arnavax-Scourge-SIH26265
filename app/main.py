@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, eadvice, i18n, jobs, lifecycle, policy, procs, reports, seed, totp, vault, views
+from . import accounts, auth, db, eadvice, i18n, jobs, lifecycle, mailer, policy, procs, reports, seed, totp, vault, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
 HERE = Path(__file__).parent
@@ -99,12 +99,25 @@ def fdr_bundle(fid, _depth=0):
          "release_request": rel, "predecessor": pred, "successor": succ, "hold": hold}
     if rel:
         b["clearances"] = {c["dept"]: c for c in db.q("SELECT * FROM release_clearances WHERE release_id=?", (rel["id"],))}
-        b["approvals"] = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
+        b["release_fp"] = release_fingerprint(f, rel, b["clearances"], hold)
+        allapp = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
+        b["approvals"] = [a for a in allapp if a.get("fp") in (None, b["release_fp"])]
+        b["stale_approvals"] = [a for a in allapp if a.get("fp") not in (None, b["release_fp"])]
         b["signers_needed"] = 2 if float(f["principal"]) >= lifecycle.RULES["release"]["second_signer_from_rupees"] else 1
     b["eadvice"] = eadvice_state(b)
     b["branch"] = db.q1("SELECT * FROM branch_requests WHERE fdr_id=? ORDER BY created_at DESC", (fid,))
     b["documents"] = db.q("SELECT id, kind, filename, mime, size, sha256, uploaded_by, uploaded_at FROM documents WHERE fdr_id=? ORDER BY id DESC", (fid,))
     return b
+
+
+def release_fingerprint(f, rel, clearances, hold):
+    """What an approving officer signed off on. If any of it changes afterwards (bank evidence, clearances,
+    documents, hold, principal), earlier signatures no longer count and must be given again."""
+    docs = db.q("SELECT id, sha256 FROM documents WHERE fdr_id=? ORDER BY id", (f["id"],))
+    material = {"evidence": rel["evidence_id"], "principal": f["principal"], "hold": hold["id"] if hold else None,
+                "clearances": sorted((d, c["decision"]) for d, c in clearances.items()),
+                "documents": [(d["id"], d["sha256"]) for d in docs]}
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
 def eadvice_state(b):
@@ -238,11 +251,51 @@ def find(request: Request, fd: str = ""):
 @app.get("/signin", response_class=HTMLResponse)
 def signin_page(request: Request, next: str = "/"):
     return render(request, "signin.html", institutions=db.q("SELECT * FROM institutions ORDER BY id"), next=next if next.startswith("/") and not next.startswith("//") else "/",
-                  access_required=bool(ACCESS_CODE))
+                  access_required=bool(ACCESS_CODE), picker=accounts.role_picker_allowed(), demo_accounts=seed.DEMO_ACCOUNTS if accounts.role_picker_allowed() else [])
+
+
+def _safe_next(next, dest):
+    return next if next and next.startswith("/") and not next.startswith(("//", "/\\")) and next not in ("/", "/signin") else dest
+
+
+@app.post("/signin/password")
+def signin_password(request: Request, username: str = Form(""), password: str = Form(""), otp: str = Form(""), next: str = Form("/")):
+    """Named-account sign-in (scrypt passwords, lockout, TOTP for officers). The only sign-in in SCOURGE_AUTH=password mode."""
+    user = username.strip().lower()[:40]
+    if db.q1("SELECT COUNT(*) AS n FROM login_failures WHERE who=? AND at>?", ("acct:" + user, time.time() - LOCKOUT_SECONDS))["n"] >= LOCKOUT_FAILURES:
+        db.event("anonymous", "signin_locked", username=user)
+        raise HTTPException(429, "Too many failed attempts for this account. Sign-in is locked for 15 minutes.")
+    a = accounts.verify(user, password[:200])
+
+    def fail(msg, kind="signin_password_failed"):
+        db.x("INSERT INTO login_failures(who,at) VALUES(?,?)", ("acct:" + user, time.time()))
+        db.event("anonymous", kind, username=user)
+        time.sleep(0.3)
+        raise HTTPException(403, msg)
+    if not a:
+        fail("Wrong user name or password.")
+    if a["role"] == "officer":
+        mfa = db.q1("SELECT * FROM officer_mfa WHERE officer=? AND enabled=1", (a["officer"],))
+        if MFA_REQUIRED and not mfa:
+            raise HTTPException(403, "Two-factor sign-in is required for officers. Ask the administrator to enrol your authenticator.")
+        if mfa:
+            st = totp.verify(mfa["secret"], otp, mfa["last_step"])
+            if st is None:
+                fail(f"Enter the current 6-digit code from your authenticator app.", "signin_otp_failed")
+            db.x("UPDATE officer_mfa SET last_step=? WHERE officer=?", (st, a["officer"]))
+        cookie, dest = auth.make_cookie("officer", None, a["officer"]), "/register"
+    else:
+        cookie, dest = auth.make_cookie("institution", a["institution_id"]), "/portal"
+    r = RedirectResponse(_safe_next(next, dest), 303)
+    r.set_cookie(auth.COOKIE, cookie, httponly=True, samesite="lax", max_age=auth.MAX_AGE, secure=COOKIE_SECURE)
+    db.event(f"officer:{a['officer']}" if a["role"] == "officer" else f"institution:{a['institution_id']}", "signed_in", username=user, method="password")
+    return r
 
 
 @app.post("/signin")
 def signin(request: Request, role: str = Form(...), next: str = Form("/"), access_code: str = Form(""), otp: str = Form("")):
+    if not accounts.role_picker_allowed():
+        raise HTTPException(403, "Demo role selection is switched off. Sign in with your own account.")
     # The code gates entry. Someone already signed in may switch demo roles (the officer's
     # "Switch to INST-42 to answer it" step) without typing it again.
     if ACCESS_CODE and not auth.read(request) and not hmac.compare_digest(access_code.encode(), ACCESS_CODE.encode()):
@@ -611,17 +664,17 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
     if who in signed_by:
         raise HTTPException(409, "You have already signed this release. A different officer must add the second signature.")
     if len(signed_by) + 1 < b["signers_needed"]:
-        db.x("INSERT INTO release_approvals(release_id,officer,at) VALUES(?,?,?)", (rel["id"], who, now))
-        db.event(f"officer:{who}", "release_signed", fid, release=rel["id"], signature=len(signed_by) + 1, of=b["signers_needed"])
+        db.x("INSERT INTO release_approvals(release_id,officer,at,fp) VALUES(?,?,?,?)", (rel["id"], who, now, b["release_fp"]))
+        db.event(f"officer:{who}", "release_signed", fid, release=rel["id"], signature=len(signed_by) + 1, of=b["signers_needed"], fingerprint=b["release_fp"])
         return RedirectResponse(f"/fdrs/{fid}", 303)
-    db.x("INSERT INTO release_approvals(release_id,officer,at) VALUES(?,?,?)", (rel["id"], who, now))
+    db.x("INSERT INTO release_approvals(release_id,officer,at,fp) VALUES(?,?,?,?)", (rel["id"], who, now, b["release_fp"]))
     approvers = signed_by + [who]
     letter = f"AICTE/RB/REL/{datetime.utcfromtimestamp(now).year}/{rel['id']:04d}"
     f = b["f"]
     signed = {"type": "aicte-pledge-release/v1", "letter_no": letter, "fdr_id": fid, "fd_number": f["fd_number"],
               "bank_host": f["bank_host"], "institution_id": f["institution_id"], "principal": f["principal"],
               "proposed_by": rel["proposed_by"], "approved_by": who, "signed_by": approvers,
-              "clearances": sorted(b["clearances"]), "bank_proof_evidence_id": rel["evidence_id"],
+              "clearances": sorted(b["clearances"]), "bank_proof_evidence_id": rel["evidence_id"], "case_fingerprint": b["release_fp"],
               "approved_at": int(now)}
     signed_json = json.dumps(signed, sort_keys=True, separators=(",", ":"))
     signature = base64.b64encode(AICTE_SIGNING_KEY.sign(signed_json.encode())).decode()
@@ -1431,13 +1484,14 @@ def notifications_page(request: Request, audience: str = ""):
     s = auth.require(request)
     if s["role"] == "officer":
         lifecycle.run_daily(bundles_by_inst())
+        mailer.deliver_pending()
         rows = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience!='institution' AND (?='' OR audience=?) ORDER BY id DESC LIMIT 300", (audience, audience))
-        outbox = db.q1("SELECT COUNT(*) AS n FROM notifications WHERE channel='email'")["n"]
+        outbox = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) AS n FROM notifications WHERE channel='email' GROUP BY status")}
     else:
         lifecycle.run_daily(bundles_by_inst(s["inst"]))
         rows = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience='institution' AND institution_id=? ORDER BY id DESC LIMIT 300", (s["inst"],))
-        outbox = db.q1("SELECT COUNT(*) AS n FROM notifications WHERE channel='email' AND audience='institution' AND institution_id=?", (s["inst"],))["n"]
-    return render(request, "notifications.html", s, rows=rows, outbox=outbox, audience=audience, LADDER=lifecycle.LADDER)
+        outbox = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) AS n FROM notifications WHERE channel='email' AND audience='institution' AND institution_id=? GROUP BY status", (s["inst"],))}
+    return render(request, "notifications.html", s, rows=rows, outbox=outbox, audience=audience, LADDER=lifecycle.LADDER, smtp=mailer.configured())
 
 
 @app.post("/notifications/run")
@@ -1449,7 +1503,8 @@ def notifications_run(request: Request, csrf: str = Form(""), as_of: str = Form(
     except ValueError:
         raise HTTPException(422, "Enter a valid date.")
     n = lifecycle.run_daily(bundles_by_inst(), d)
-    db.event(auth.actor(s), "daily_check_run", None, as_of=d.isoformat(), added=n)
+    sent = mailer.deliver_pending()
+    db.event(auth.actor(s), "daily_check_run", None, as_of=d.isoformat(), added=n, email=sent)
     return RedirectResponse("/notifications?ran=" + str(n), 303)
 
 

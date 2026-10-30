@@ -1,6 +1,7 @@
 """Demo seed: SAMPLE institutions and FDRs, plus the synthetic bank's state.
 Bank session tokens are random per reset and never shown in the UI."""
 import json
+import os
 import secrets
 import time
 
@@ -71,6 +72,13 @@ def read_bank_state():
     return json.loads(BANK_STATE.read_text())
 
 
+# Named demo accounts (DEMO MODE ONLY; SCOURGE_AUTH=password deployments create accounts with scripts/create_account.py).
+DEMO_PASSWORD = os.environ.get("SCOURGE_DEMO_PASSWORD", "Scourge-demo-2026")
+DEMO_ACCOUNTS = [("rb01.scrutiny", "officer", None, "RB-01"), ("rb02.approver", "officer", None, "RB-02"),
+                 ("rb03.authority", "officer", None, "RB-03"), ("inst42.registrar", "institution", "INST-42", None),
+                 ("inst77.registrar", "institution", "INST-77", None)]
+
+
 def seed():
     db.wipe()
     now = time.time()
@@ -84,3 +92,7 @@ def seed():
              (fid, iid, fd, BANK_HOST, p, issue, mat, now, "seed"))
     write_bank_state(bank_state_initial())
     db.event("system", "demo_reset", note="sample data loaded: 2 institutions, 4 FDRs; synthetic bank reset")
+    from . import accounts
+    if accounts.role_picker_allowed():
+        for u, role, inst, off in DEMO_ACCOUNTS:
+            accounts.create(u, DEMO_PASSWORD, role, inst, off)

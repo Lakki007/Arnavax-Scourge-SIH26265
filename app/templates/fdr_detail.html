@@ -71,6 +71,7 @@
   {% for dk, dl in DEPTS.items() %}{% set c = b.clearances.get(dk) %}<tr id="clr-{{ dk }}"><td>{{ dl }}</td><td>{% if c %}<span class="st {{ 'st-confirmed' if c.decision == 'clear' else 'st-discrepancy' }}">{{ 'Cleared' if c.decision == 'clear' else 'Objection' }}</span> <span class="muted small">by {{ c.officer }}{% if c.note %}: {{ c.note }}{% endif %}</span>{% else %}<span class="muted small">pending</span>{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>
   <p class="small" style="margin-top:10px">Signatures: {% for a in b.approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% else %}none yet{% endfor %} ({{ b.approvals|length }} of {{ b.signers_needed }}).</p>
+  {% if b.stale_approvals %}<p class="note note-warn small" id="stale-signatures"><b>Signatures withdrawn automatically:</b> {% for a in b.stale_approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% endfor %} signed before the case changed (evidence, clearances, documents, hold or amount). They must sign again.</p>{% endif %}
   {% if s.role == 'officer' %}
   <form method="post" action="/fdrs/{{ f.id }}/release/clear" class="actions" style="margin-top:8px;align-items:flex-end">
     <input type="hidden" name="csrf" value="{{ s.csrf }}">

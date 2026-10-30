@@ -901,3 +901,60 @@ def test_reconcile_bank_files_flags_but_never_decides(off):
     assert nocsrf.status_code == 403
     with db() as con:
         assert con.execute("SELECT count(*) FROM events WHERE kind='bank_file_reconciled'").fetchone()[0] == 3
+
+
+def test_signature_withdrawn_when_case_changes_after_signing(off):
+    off.post("/fdrs/new", institution_id="INST-77", fd_number="FD-0000990002", bank_host="netbanking.mockbank.test",
+             principal="15000000", issue_date="2024-01-01", maturity="2034-01-01")
+    fid = db().execute("SELECT id FROM fdrs WHERE fd_number='FD-0000990002'").fetchone()[0]
+    FD[fid] = "FD-0000990002"
+    assert off.post("/mockbank/open", fd_number="FD-0000990002").status_code == 303
+    j, cid = prove(off, fid, inst="INST-77")
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    off.post(f"/fdrs/{fid}/decide", action="accept", evidence_id=str(eid))
+    off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0300 term completed")
+    _clear_all(off, fid)
+    rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # first signature
+    # a document is added to the case after RB-02 signed
+    inst = S("institution:INST-77")
+    pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+    assert inst.c.post(f"/fdrs/{fid}/documents", data={"csrf": inst.csrf, "kind": "fdr_receipt"},
+                       files={"file": ("late.pdf", pdf, "application/pdf")}).status_code == 303
+    assert "stale-signatures" in off.get(f"/fdrs/{fid}").text
+    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303                # counts as the first valid signature now
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # RB-02 signs again, on the current case
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is not None
+    body = rb2.get(f"/fdrs/{fid}/release-letter.json").json()
+    assert body["payload"]["signed_by"] == ["RB-03", "RB-02"] and len(body["payload"]["case_fingerprint"]) == 64
+
+
+def _pw(user, pw, otp=""):
+    c = httpx.Client(base_url=B, follow_redirects=False, timeout=60)
+    return c, c.post("/signin/password", data={"username": user, "password": pw, "otp": otp, "next": "/"})
+
+
+def test_named_accounts_password_signin_and_lockout(off):
+    c, r = _pw("rb02.approver", "Scourge-demo-2026")
+    assert r.status_code == 303 and r.headers["location"] == "/register"
+    assert c.get("/register").status_code == 200
+    raw = c.cookies["scourge_session"]
+    assert json.loads(base64.urlsafe_b64decode(raw.rsplit(".", 1)[0]))["who"] == "RB-02"
+    c2, r2 = _pw("inst42.registrar", "Scourge-demo-2026")
+    assert r2.headers["location"] == "/portal" and c2.get("/register").status_code == 403
+    assert _pw("nobody.here", "Scourge-demo-2026")[1].status_code == 403
+    for _ in range(5):
+        assert _pw("rb01.scrutiny", "wrong-password-xyz")[1].status_code == 403
+    assert _pw("rb01.scrutiny", "Scourge-demo-2026")[1].status_code == 429                # locked even with the right password
+    with db() as con:
+        h = con.execute("SELECT pw_hash, salt FROM accounts WHERE username='rb02.approver'").fetchone()
+        assert len(h[0]) == 64 and "Scourge" not in h[0]                                    # scrypt hash, not the password
+        assert con.execute("SELECT count(*) FROM events WHERE detail_json LIKE '%Scourge-demo%'").fetchone()[0] == 0
+
+
+def test_email_alerts_delivered_over_smtp_when_configured(off):
+    # the running app has no SMTP configured: e-mail is queued, never claimed as sent
+    r = off.get("/notifications")
+    assert "once SMTP is configured" in r.text
+    assert db().execute("SELECT count(*) FROM notifications WHERE channel='email' AND status='sent'").fetchone()[0] == 0

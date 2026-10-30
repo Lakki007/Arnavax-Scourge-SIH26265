@@ -1,10 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Choose a demo role{% endblock %}
+{% block title %}Sign in{% endblock %}
 {% block main %}
 <div style="max-width:560px;margin:6vh auto 0">
-  <h1>Choose a demo role<span class="serif">Each role sees only what it should.</span></h1>
-  <p class="lede">Demo sign-in has no passwords. A real deployment would use AICTE's single sign-on for officers and the institution's portal login.</p>
-  <form method="post" action="/signin" style="margin-top:32px">
+  <h1>Sign in<span class="serif">Each role sees only what it should.</span></h1>
+  <form method="post" action="/signin/password" style="margin-top:24px" id="pw-form">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field"><label for="username">User name</label><input id="username" name="username" autocomplete="username" required></div>
+    <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
+    <div class="field"><label for="otp-pw">Authenticator code <span class="muted small">(officers with two-factor sign-in)</span></label><input id="otp-pw" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
+    <button class="btn btn-solid">Sign in</button>
+  </form>
+  {% if demo_accounts %}<p class="small muted" style="margin-top:10px">Demo accounts (password <code>Scourge-demo-2026</code>): {% for u, r, i, o in demo_accounts %}<code>{{ u }}</code>{% if not loop.last %}, {% endif %}{% endfor %}. Passwords are stored as scrypt hashes; 5 wrong attempts lock the account for 15 minutes.</p>{% endif %}
+  {% if picker %}
+  <h2 style="margin-top:36px">Or pick a demo role</h2>
+  <p class="lede">One-click demo sign-in for judges. Switched off in deployment (<code>SCOURGE_AUTH=password</code>).</p>
+  <form method="post" action="/signin" style="margin-top:16px">
     <input type="hidden" name="next" value="{{ next }}">
     <fieldset class="choice">
       <legend>Sign in as</legend>
@@ -17,7 +27,8 @@
     </fieldset>
     <div class="field" style="margin-top:16px"><label for="otp">Authenticator code <span class="muted small">(officers with two-factor sign-in only)</span></label><input id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
     {% if access_required %}<div class="field" style="margin-top:20px"><label for="access_code">Judges' access code</label><input id="access_code" name="access_code" type="password" autocomplete="off" required></div>{% endif %}
-    <button class="btn btn-solid">Continue</button>
+    <button class="btn btn-quiet">Continue as demo role</button>
   </form>
+  {% endif %}
 </div>
 {% endblock %}

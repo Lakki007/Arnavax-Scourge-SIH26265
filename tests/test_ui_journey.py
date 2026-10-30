@@ -184,9 +184,9 @@ def test_reset_and_repeat(page):
     reset(page)
     expect(page.locator("tbody .st")).to_have_text(["Submitted by institution"] * 4)
     page.goto(B + "/audit")
-    # the reset wipes the log; its own entry is the first, followed only by the daily reminder check the register runs
+    # the reset wipes the log; its own entry is the first, then the 5 demo accounts, then the daily reminder check
     expect(page.locator("tbody tr").last).to_contain_text("demo reset")
-    expect(page.locator("tbody tr")).to_have_count(2)
+    expect(page.locator("tbody tr")).to_have_count(7)
     assert not page.errors, page.errors
 
 

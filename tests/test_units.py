@@ -205,3 +205,92 @@ def test_released_deposits_ignored_by_reconcile():
     reg = [_row("FDR-003", "FD-0000555555", st="released")]
     k, e = _rep.parse("s.xml", _sample("statement.camt053.xml"))
     assert _rep.reconcile(k, e, reg) == []
+
+
+# ---------------------------------------------------------------- accounts, mailer
+def _fresh_db(tmp):
+    from app import db as _db
+    _db._conn = None
+    _db.DB_PATH = __import__("pathlib").Path(tmp) / "t.db"
+    return _db
+
+
+def test_password_hashing_and_strength(tmp_path):
+    from app import accounts, db as _db
+    old = _db.DB_PATH
+    try:
+        _fresh_db(tmp_path)
+        accounts.create("rb09.test", "correct horse battery 9", "officer", officer="RB-09")
+        assert accounts.verify("rb09.test", "correct horse battery 9")["officer"] == "RB-09"
+        assert accounts.verify("RB09.TEST ", "correct horse battery 9") is not None              # case/space-insensitive name
+        assert accounts.verify("rb09.test", "correct horse battery 8") is None
+        assert accounts.verify("ghost", "correct horse battery 9") is None
+        for u, pw in [("ab", "long enough password 1"), ("rb10.x", "short"), ("rb10.x", "rb10.x-is-my-password"), ("rb10.x", "aaaaaaaaaaaaaaaa")]:
+            with pytest.raises(accounts.Weak):
+                accounts.create(u, pw, "officer", officer="RB-10")
+        with pytest.raises(accounts.Weak):
+            accounts.create("inst.x", "correct horse battery 9", "institution")                  # institution id required
+    finally:
+        _db._conn = None
+        _db.DB_PATH = old
+
+
+def test_mailer_sends_retries_and_fails(tmp_path, monkeypatch):
+    import socket, threading
+    from app import db as _db, mailer
+    got = []
+
+    def smtp_server(sock, fail_first):
+        n = 0
+        while True:
+            try:
+                c, _ = sock.accept()
+            except OSError:
+                return
+            f = c.makefile("rwb")
+            n += 1
+            f.write(b"220 test\r\n"); f.flush()
+            data_mode, msg = False, []
+            for line in f:
+                if data_mode:
+                    if line == b".\r\n":
+                        data_mode = False
+                        got.append(b"".join(msg)); f.write(b"250 ok\r\n"); f.flush(); continue
+                    msg.append(line); continue
+                cmd = line[:4].upper()
+                if cmd in (b"EHLO", b"HELO"):
+                    f.write(b"250 test\r\n")
+                elif cmd == b"RCPT" and fail_first and n == 1:
+                    f.write(b"451 try later\r\n")
+                elif cmd == b"DATA":
+                    f.write(b"354 go\r\n"); data_mode = True
+                elif cmd == b"QUIT":
+                    f.write(b"221 bye\r\n"); f.flush(); break
+                else:
+                    f.write(b"250 ok\r\n")
+                f.flush()
+            c.close()
+
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(5)
+    threading.Thread(target=smtp_server, args=(s, True), daemon=True).start()
+    monkeypatch.setenv("SCOURGE_SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("SCOURGE_SMTP_PORT", str(s.getsockname()[1]))
+    old = _db.DB_PATH
+    try:
+        _fresh_db(tmp_path)
+        for i, aud in enumerate(("institution", "regional_head", "nowhere")):
+            _db.x("INSERT INTO notifications(fdr_id,institution_id,kind,step,audience,channel,title,body,created_at,as_of,status) "
+                  "VALUES('FDR-001','INST-42','reminder',?,?,'email','T-30 reminder','FD matures in 30 days',0,'2026-10-30','queued')", (str(i), aud))
+        r1 = mailer.deliver_pending(now=1000)
+        st = {n["audience"]: n for n in _db.q("SELECT * FROM notifications")}
+        assert st["nowhere"]["status"] == "failed" and st["nowhere"]["last_error"] == "no address on file"
+        assert st["institution"]["status"] == "retrying" and st["institution"]["next_try"] == 1060        # 451 on the first connection
+        assert st["regional_head"]["status"] == "sent"
+        assert mailer.deliver_pending(now=1001)["sent"] == 0                                               # not due yet
+        assert mailer.deliver_pending(now=1061)["sent"] == 1
+        assert _db.q1("SELECT status FROM notifications WHERE audience='institution'")["status"] == "sent"
+        assert any(b"registrar@inst42.example.test" in m or b"T-30 reminder" in m for m in got)
+        kinds = [e["kind"] for e in _db.q("SELECT kind FROM events")]
+        assert kinds.count("email_sent") == 2 and kinds.count("email_failed") == 1
+    finally:
+        s.close(); _db._conn = None; _db.DB_PATH = old
