@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+ <BkToCstmrStmt><GrpHdr><MsgId>SYN-STMT-0001</MsgId><CreDtTm>2026-10-30T10:00:00</CreDtTm></GrpHdr>
+  <Stmt><Id>SYN-0001</Id><Acct><Id><Othr><Id>SYNTHETIC-SB-001</Id></Othr></Id></Acct>
+   <Ntry><Amt Ccy="INR">1500000.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-10-12</Dt></BookgDt>
+    <AddtlNtryInf>PREMATURE CLOSURE FD-0000555555 PROCEEDS</AddtlNtryInf></Ntry>
+   <Ntry><Amt Ccy="INR">12000.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-10-14</Dt></BookgDt>
+    <AddtlNtryInf>ELECTRICITY BILL</AddtlNtryInf></Ntry>
+  </Stmt></BkToCstmrStmt></Document>

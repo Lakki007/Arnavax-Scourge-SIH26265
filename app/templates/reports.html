@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_m.html" import status %}
+{% block title %}Reports{% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <h1>Reports<span class="serif">The register at a glance, and what matures when.</span></h1>
+  <p class="lede">Exports are formula-safe and every download is written to the audit log.</p>
+</div>
+<div class="actions"><a class="btn btn-quiet" href="/reports/register.csv">Register (CSV)</a><a class="btn btn-solid" href="/reports/register.xlsx">Register (Excel)</a></div>
+</div>
+<div class="grid-4" id="kpis">
+  <div class="panel" style="padding:14px"><b style="font-size:1.4em">{{ k.live }}</b> live deposits<div class="muted small">{{ k.total }} on register in all</div></div>
+  <div class="panel" style="padding:14px"><b style="font-size:1.4em">{{ rupees(k.principal) }}</b><div class="muted small">live principal pledged to AICTE</div></div>
+  <div class="panel" style="padding:14px"><b style="font-size:1.4em">{{ k.confirmed_pct }}%</b> bank-confirmed<div class="muted small">{{ k.confirmed }} deposits, {{ rupees(k.confirmed_principal) }}</div></div>
+  <div class="panel" style="padding:14px"><b style="font-size:1.4em">{{ k.flagged }}</b> flagged · <b>{{ k.maturing_90 }}</b> maturing ≤ 90 days<div class="muted small">discrepancy, escalated or on hold</div></div>
+</div>
+<h2 style="margin-top:28px">Maturity calendar <span class="muted small">(next 6 years)</span></h2>
+{% if cal %}
+<div class="table-wrap" id="calendar"><table><thead><tr><th>Month</th><th>Deposits</th><th>Principal</th><th>FDRs</th></tr></thead><tbody>
+{% for month, rs in cal %}<tr{% if month == 'Overdue' %} class="alert-escalation"{% endif %}><td class="nowrap"><b>{{ month }}</b></td><td>{{ rs|length }}</td><td class="nowrap">{{ rupees(rs|map(attribute='f')|map(attribute='principal')|map('float')|sum) }}</td>
+<td class="small">{% for r in rs %}<a class="mono" href="/fdrs/{{ r.f.id }}">{{ r.f.fd_number }}</a> <span class="muted">{{ r.f.maturity }} · {{ r.status[1] }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty">Nothing matures in the next 6 years.</div>{% endif %}
+{% endblock %}

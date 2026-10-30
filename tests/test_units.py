@@ -139,3 +139,69 @@ def test_eadvice_wrong_fd_old_and_unapproved():
     fake = eadvice.issue("netbanking.mockbank.test", "FD-0000777777", {"lien": "A"},
                          open(os.path.join(ROOT, "certs/bank_fake.key.pem"), "rb").read(), open(os.path.join(ROOT, "certs/bank_fake.pem"), "rb").read())
     assert "trusted bank root" in eadvice.verify(fake, FDR, CA, ALLOW)["reason"]
+
+
+# ---------------------------------------------------------------- reports / reconciliation
+from app import reports as _rep
+
+SAMPLES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "static", "samples")
+
+
+def _row(fid, fd, principal="1000000.00", maturity="2031-07-01", st="confirmed"):
+    return {"f": {"id": fid, "fd_number": fd, "principal": principal, "maturity": maturity, "institution_id": "I", "inst_name": "X",
+                  "bank_host": "netbanking.mockbank.test", "issue_date": "2021-07-01"}, "status": (st, st.title(), ""), "evidence": []}
+
+
+REG = [_row("FDR-001", "FD-0000123456"), _row("FDR-002", "FD-0000777777", "2500000.00", "2029-01-15"),
+       _row("FDR-003", "FD-0000555555", "1500000.00", "2030-03-31"), _row("FDR-004", "FD-0000444444", "500000.00", "2032-04-01")]
+
+
+def _sample(n):
+    with open(os.path.join(SAMPLES, n), "rb") as fh:
+        return fh.read()
+
+
+def test_formula_injection_neutralised():
+    assert _rep.safe_cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+    assert _rep.safe_cell("+91") == "'+91" and _rep.safe_cell("@x") == "'@x" and _rep.safe_cell("ok") == "ok"
+    csvtxt = _rep.to_csv([_row("FDR-9", "=CMD()")])
+    assert "'=CMD()" in csvtxt
+
+
+def test_xlsx_export_opens_and_has_summary():
+    import openpyxl, io as _io
+    rows = [dict(r, f=dict(r["f"])) for r in REG]
+    wb = openpyxl.load_workbook(_io.BytesIO(_rep.to_xlsx(rows, _rep.kpis(rows))))
+    assert wb.sheetnames == ["Register", "Summary"] and wb["Register"].max_row >= 5
+
+
+def test_reconcile_csv_register():
+    kind, items = _rep.parse("r.csv", _sample("bank_fd_register.csv"))
+    assert kind == "register" and len(items) == 4
+    f = _rep.reconcile(kind, items, REG)
+    texts = " | ".join(x["text"] for x in f)
+    assert any(x["fdr"] == "FDR-002" and "Lien" in x["text"] for x in f)
+    assert any(x["fdr"] == "FDR-004" and "missing" in x["text"] for x in f)
+    assert any(x["fd"] == "FD-0000999999" and x["level"] == "info" for x in f)
+    assert not any(x["fdr"] == "FDR-001" for x in f), texts
+
+
+def test_reconcile_camt053_and_mt940():
+    k1, e1 = _rep.parse("s.xml", _sample("statement.camt053.xml"))
+    f1 = _rep.reconcile(k1, e1, REG)
+    assert k1 == "statement" and len(e1) == 2 and [x["fdr"] for x in f1] == ["FDR-003"]
+    k2, e2 = _rep.parse("s.940", _sample("statement.mt940"))
+    f2 = _rep.reconcile(k2, e2, REG)
+    assert len(e2) == 2 and [x["fdr"] for x in f2] == ["FDR-002"] and "2,125,000.00" in f2[0]["text"]
+
+
+def test_reconcile_rejects_bad_files():
+    for data in (b"<!DOCTYPE x [<!ENTITY a 'b'>]><x/>", b"<notcamt/>", b"\xff\xfe\x00", b"a,b\n1,2\n", b"x" * (_rep.MAX_BYTES + 1)):
+        with pytest.raises(_rep.BadFile):
+            _rep.parse("f", data)
+
+
+def test_released_deposits_ignored_by_reconcile():
+    reg = [_row("FDR-003", "FD-0000555555", st="released")]
+    k, e = _rep.parse("s.xml", _sample("statement.camt053.xml"))
+    assert _rep.reconcile(k, e, reg) == []
