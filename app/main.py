@@ -59,7 +59,7 @@ def render(request, name, s=None, status=200, **ctx):
     return T.TemplateResponse(request, name, {"s": s, "path": request.url.path, "health": procs.health(), **ctx}, status_code=status)
 
 
-def fdr_bundle(fid):
+def fdr_bundle(fid, _depth=0):
     f = db.q1("SELECT f.*, i.name AS inst_name, i.city AS inst_city FROM fdrs f JOIN institutions i ON i.id=f.institution_id WHERE f.id=?", (fid,))
     if not f:
         return None
@@ -68,8 +68,21 @@ def fdr_bundle(fid):
     openc = db.q1("SELECT * FROM challenges WHERE fdr_id=? AND state='issued' ORDER BY issued_at DESC", (fid,))
     if not challenge_live(openc):
         openc = None
-    st = policy.fdr_status(f, ev, acts, openc)
-    return {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st}
+    base = policy.fdr_status(f, ev, acts, openc)
+    st = base
+    rel = db.q1("SELECT * FROM release_requests WHERE fdr_id=? AND state='pending' ORDER BY id DESC", (fid,))
+    pred = db.q1("SELECT id, fd_number FROM fdrs WHERE id=?", (f["renews_fdr_id"],)) if f.get("renews_fdr_id") else None
+    succ_row = db.q1("SELECT id FROM fdrs WHERE renews_fdr_id=?", (fid,))
+    succ = None
+    if succ_row and _depth < 20:
+        sb = fdr_bundle(succ_row["id"], _depth + 1)
+        succ = {"id": sb["f"]["id"], "fd_number": sb["f"]["fd_number"], "status": sb["status"]}
+        if sb["status"][0] in ("confirmed", "released", "renewed", "release_pending") and base[0] != "released":
+            st = ("renewed", "Renewed", f"into {succ['id']}, confirmed by the bank")
+    if st == base and rel and base[0] == "confirmed":
+        st = ("release_pending", "Release proposed", f"by {rel['proposed_by']}; needs a second officer")
+    return {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st, "base_status": base,
+            "release_request": rel, "predecessor": pred, "successor": succ}
 
 
 def challenge_live(c):
@@ -185,8 +198,9 @@ def signin(request: Request, role: str = Form(...), next: str = Form("/"), acces
         time.sleep(0.5)  # slows guessing; the code is shared with judges only
         db.event("anonymous", "signin_refused")
         raise HTTPException(403, "Wrong access code. Ask the team for the judges' code.")
-    if role == "officer":
-        cookie, dest = auth.make_cookie("officer", None), "/register"
+    if role == "officer" or (role.startswith("officer:") and role.split(":", 1)[1] in auth.OFFICERS):
+        who = role.split(":", 1)[1] if ":" in role else "RB-01"
+        cookie, dest = auth.make_cookie("officer", None, who), "/register"
     elif role.startswith("institution:") and db.q1("SELECT 1 AS x FROM institutions WHERE id=?", (role.split(":", 1)[1],)):
         cookie, dest = auth.make_cookie("institution", role.split(":", 1)[1]), "/portal"
     else:
@@ -195,7 +209,7 @@ def signin(request: Request, role: str = Form(...), next: str = Form("/"), acces
         dest = next
     r = RedirectResponse(dest, 303)
     r.set_cookie(auth.COOKIE, cookie, httponly=True, samesite="lax", max_age=auth.MAX_AGE, secure=COOKIE_SECURE)
-    db.event("officer" if role == "officer" else role, "signed_in")
+    db.event("officer" if role.startswith("officer") else role, "signed_in", officer=role.split(":", 1)[1] if role.startswith("officer:") else None)
     return r
 
 
@@ -220,7 +234,7 @@ def monitor(allr, today=None):
     out = {"matured": [], "maturing": [], "recheck": [], "flagged": []}
     for r in allr:
         st = r["status"][0]
-        if st == "released":
+        if st in ("released", "renewed"):
             continue
         try:
             days = (date.fromisoformat(r["f"]["maturity"]) - today).days
@@ -269,7 +283,16 @@ def register(request: Request, q: str = "", status: str = "", page: int = 1):
 def new_fdr_page(request: Request):
     s = auth.require(request)
     v = {"institution_id": s["inst"]} if s["role"] == "institution" else {}
-    return render(request, "fdr_new.html", s, institutions=_insts_for(s), errors={}, v=v)
+    if request.query_params.get("renews"):
+        v["renews"] = request.query_params["renews"]
+    return render(request, "fdr_new.html", s, institutions=_insts_for(s), errors={}, v=v, renewable=_renewable(s))
+
+
+def _renewable(s):
+    """FDRs that can be renewed: not released and not already renewed."""
+    rows = db.q("SELECT f.id, f.fd_number, f.institution_id, f.maturity FROM fdrs f WHERE f.released_at IS NULL "
+                "AND NOT EXISTS (SELECT 1 FROM fdrs g WHERE g.renews_fdr_id=f.id) ORDER BY f.id")
+    return [r for r in rows if s["role"] == "officer" or r["institution_id"] == s["inst"]]
 
 
 def _insts_for(s):
@@ -284,7 +307,8 @@ AMT_RE = re.compile(r"^\d{1,10}(\.\d{1,2})?$")
 
 @app.post("/fdrs/new", response_class=HTMLResponse)
 def new_fdr(request: Request, csrf: str = Form(""), institution_id: str = Form(""), fd_number: str = Form(""),
-            bank_host: str = Form(""), principal: str = Form(""), issue_date: str = Form(""), maturity: str = Form("")):
+            bank_host: str = Form(""), principal: str = Form(""), issue_date: str = Form(""), maturity: str = Form(""),
+            renews: str = Form("")):
     # Step 1 of the workflow: the institution files its own claim. An officer may also enter one from a paper submission.
     s = auth.require(request)
     auth.check_csrf(s, csrf)
@@ -319,15 +343,26 @@ def new_fdr(request: Request, csrf: str = Form(""), institution_id: str = Form("
             e["maturity"] = "Maturity must be after the issue date."
     except ValueError:
         e["maturity"] = "Enter a valid date."
+    v["renews"] = renews
+    if renews:
+        old = db.q1("SELECT * FROM fdrs WHERE id=?", (renews,))
+        if not old or old["institution_id"] != institution_id:
+            e["renews"] = "Choose one of this institution's own FDRs."
+        elif old["released_at"]:
+            e["renews"] = "That FDR has already been released."
+        elif db.q1("SELECT 1 AS x FROM fdrs WHERE renews_fdr_id=?", (renews,)):
+            e["renews"] = "That FDR already has a renewal filed."
     if e:
-        return render(request, "fdr_new.html", s, status=422, institutions=_insts_for(s), errors=e, v=v)
+        return render(request, "fdr_new.html", s, status=422, institutions=_insts_for(s), errors=e, v=v, renewable=_renewable(s))
     n = db.q1("SELECT COUNT(*) AS n FROM fdrs")["n"] + 1
     fid = f"FDR-{n:03d}"
     while db.q1("SELECT 1 AS x FROM fdrs WHERE id=?", (fid,)):
         n += 1
         fid = f"FDR-{n:03d}"
-    db.x("INSERT INTO fdrs(id,institution_id,fd_number,bank_host,principal,issue_date,maturity,created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?)",
-         (fid, institution_id, v["fd_number"], bank_host, f"{float(v['principal']):.2f}", issue_date, maturity, time.time(), by))
+    db.x("INSERT INTO fdrs(id,institution_id,fd_number,bank_host,principal,issue_date,maturity,created_at,created_by,renews_fdr_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+         (fid, institution_id, v["fd_number"], bank_host, f"{float(v['principal']):.2f}", issue_date, maturity, time.time(), by, renews or None))
+    if renews:
+        db.event(auth.actor(s), "renewal_filed", renews, renewed_into=fid, fd_number=v["fd_number"])
     db.event(auth.actor(s), "fdr_registered", fid, fd_number=v["fd_number"], principal=v["principal"], filed_by=by)
     return RedirectResponse(f"/fdrs/{fid}?registered=1", 303)
 
@@ -347,7 +382,7 @@ def fdr_detail(request: Request, fid: str):
     latest_facts = json.loads(latest["facts_json"]) if latest else {}
     return render(request, "fdr_detail.html", s, b=b, latest=latest, latest_match=latest_match, latest_facts=latest_facts, gates=gates,
                   challenges=chall, events=events, jobs=jobs_, now=time.time(), bank_dep=bank_dep,
-                  cvw=views.claim_vs_witness(b["f"], latest_match), nxt=views.next_action(b, gates),
+                  cvw=views.claim_vs_witness(b["f"], latest_match), nxt=views.next_action(b, gates, auth.officer_id(s) if s["role"] == "officer" else None),
                   rc=receipt_for(s, latest, latest_facts) if latest else None,
                   reason=policy.reason_text(latest["reason"], latest_facts) if latest and latest["reason"] else "")
 
@@ -364,6 +399,8 @@ def action_gates(b):
     g = {}
     if f["released_at"]:
         g["challenge"] = (False, "This deposit has been released.")
+    elif b.get("successor") and b["status"][0] == "renewed":
+        g["challenge"] = (False, f"Renewed into {b['successor']['id']}. Prove the renewed deposit instead.")
     elif challenge_live(b["open"]):
         g["challenge"] = (False, f"A challenge is already open until {when(b['open']['expires_at'])}.")
     else:
@@ -378,13 +415,29 @@ def action_gates(b):
     else:
         g["accept"] = (True, "") if latest["decision"] == "verified" else (False, "Only verified evidence can be accepted.")
         g["escalate"] = (True, "") if latest["decision"] != "verified" else (False, "Verified evidence does not need escalation.")
-    st = b["status"][0]
+    st = b["base_status"][0]
+    rel = b.get("release_request")
     if f["released_at"]:
         g["release"] = (False, "Already released.")
+    elif b.get("successor"):
+        g["release"] = (False, f"Renewed into {b['successor']['id']}: the renewed deposit is the one held now.")
     elif st != "confirmed":
-        g["release"] = (False, f"Release needs an accepted bank-session confirmation from the last {DEMO['confirmation_valid_days']} days. Current status: {b['status'][1]}.")
+        g["release"] = (False, f"Release needs an accepted bank-session confirmation from the last {DEMO['confirmation_valid_days']} days. Current status: {b['base_status'][1]}.")
+    elif rel:
+        g["release"] = (False, f"A release is already proposed by {rel['proposed_by']} and awaits a second officer.")
     else:
         g["release"] = (True, "")
+    # maker-checker: a pending release can be approved only by a different officer, and only while the confirmation is fresh
+    if not rel:
+        g["approve"] = g["reject"] = (False, "No release has been proposed.")
+    else:
+        g["reject"] = (True, "")
+        if f["released_at"]:
+            g["approve"] = (False, "Already released.")
+        elif st != "confirmed":
+            g["approve"] = (False, f"The bank confirmation is no longer current ({b['base_status'][1]}). Reject, or request a fresh proof.")
+        else:
+            g["approve"] = (True, "")
     g["withdraw"] = (True, "") if challenge_live(b["open"]) else (False, "No open challenge.")
     return g
 
@@ -438,11 +491,71 @@ def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(
     if action in ("escalate", "release") and len(note) < 10:
         raise HTTPException(422, "Add a note of at least 10 characters explaining the decision.")
     now = time.time()
-    db.x("INSERT INTO actions(fdr_id,evidence_id,action,note,actor,at) VALUES(?,?,?,?,?,?)", (fid, evidence_id if action != "release" else latest["id"], action, note[:500], "officer", now))
+    who = auth.officer_id(s)
     if action == "release":
-        db.x("UPDATE fdrs SET released_at=? WHERE id=?", (now, fid))
-    db.event("officer", f"officer_{action}", fid, evidence_id=evidence_id, note=note[:500])
+        # Maker step only. Money moves after a second officer approves (see /release/approve).
+        db.x("INSERT INTO release_requests(fdr_id,evidence_id,proposed_by,proposed_at,note,state) VALUES(?,?,?,?,?,?)",
+             (fid, latest["id"], who, now, note[:500], "pending"))
+        db.event(f"officer:{who}", "release_proposed", fid, evidence_id=latest["id"], note=note[:500])
+        return RedirectResponse(f"/fdrs/{fid}", 303)
+    db.x("INSERT INTO actions(fdr_id,evidence_id,action,note,actor,at) VALUES(?,?,?,?,?,?)", (fid, evidence_id, action, note[:500], "officer", now))
+    db.event("officer", f"officer_{action}", fid, evidence_id=evidence_id, note=note[:500], officer=who)
     return RedirectResponse(f"/fdrs/{fid}", 303)
+
+
+@app.post("/fdrs/{fid}/release/approve")
+def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str = Form("")):
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    ok, why = action_gates(b)["approve"]
+    if not ok:
+        raise HTTPException(409, why)
+    rel, who, now = b["release_request"], auth.officer_id(s), time.time()
+    if who == rel["proposed_by"]:
+        raise HTTPException(409, "Maker-checker: the officer who proposed a release cannot approve it. Sign in as another officer.")
+    letter = f"AICTE/RB/REL/{datetime.utcfromtimestamp(now).year}/{rel['id']:04d}"
+
+    def work(c):
+        n = c.execute("UPDATE release_requests SET state='approved', decided_by=?, decided_at=?, decision_note=?, letter_no=? WHERE id=? AND state='pending'",
+                      (who, now, note.strip()[:500], letter, rel["id"])).rowcount
+        if n != 1:
+            raise HTTPException(409, "This release was already decided.")
+        c.execute("INSERT INTO actions(fdr_id,evidence_id,action,note,actor,at) VALUES(?,?,?,?,?,?)",
+                  (fid, rel["evidence_id"], "release", f"{rel['note']} | approved by {who}", f"officer:{who}", now))
+        c.execute("UPDATE fdrs SET released_at=? WHERE id=? AND released_at IS NULL", (now, fid))
+    db.tx(work)
+    db.event(f"officer:{who}", "release_approved", fid, release=rel["id"], proposed_by=rel["proposed_by"], letter=letter, evidence_id=rel["evidence_id"])
+    return RedirectResponse(f"/fdrs/{fid}?released=1", 303)
+
+
+@app.post("/fdrs/{fid}/release/reject")
+def release_reject(request: Request, fid: str, csrf: str = Form(""), note: str = Form("")):
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    ok, why = action_gates(b)["reject"]
+    if not ok:
+        raise HTTPException(409, why)
+    note = note.strip()
+    if len(note) < 10:
+        raise HTTPException(422, "Add a reason of at least 10 characters.")
+    rel, who = b["release_request"], auth.officer_id(s)
+    state = "withdrawn" if who == rel["proposed_by"] else "rejected"
+    db.x("UPDATE release_requests SET state=?, decided_by=?, decided_at=?, decision_note=? WHERE id=? AND state='pending'",
+         (state, who, time.time(), note[:500], rel["id"]))
+    db.event(f"officer:{who}", f"release_{state}", fid, release=rel["id"], note=note[:500])
+    return RedirectResponse(f"/fdrs/{fid}", 303)
+
+
+@app.get("/fdrs/{fid}/release-letter", response_class=HTMLResponse)
+def release_letter(request: Request, fid: str):
+    s = auth.require(request)
+    b = get_fdr_or_404(s, fid)
+    rel = db.q1("SELECT * FROM release_requests WHERE fdr_id=? AND state='approved' ORDER BY id DESC", (fid,))
+    if not rel or not b["f"]["released_at"]:
+        raise HTTPException(404, "No approved release for this FDR.")
+    e = db.q1("SELECT * FROM evidence WHERE id=?", (rel["evidence_id"],))
+    ev = db.q1("SELECT hash FROM events WHERE kind='release_approved' AND fdr_id=? ORDER BY id DESC", (fid,))
+    return render(request, "release_letter.html", s, b=b, f=b["f"], rel=rel, e=e, audit_hash=(ev or {}).get("hash"))
 
 
 # ----------------------------------------------------------------- evidence
@@ -764,7 +877,14 @@ def audit(request: Request, kind: str = ""):
     s = auth.require(request, "officer")
     kinds = [r["kind"] for r in db.q("SELECT DISTINCT kind FROM events ORDER BY kind")]
     rows = db.q("SELECT * FROM events WHERE (?='' OR kind=?) ORDER BY id DESC LIMIT 300", (kind, kind))
-    return render(request, "audit.html", s, rows=rows, kinds=kinds, kind=kind)
+    return render(request, "audit.html", s, rows=rows, kinds=kinds, kind=kind, chain=db.verify_chain())
+
+
+@app.get("/api/audit/verify")
+def audit_verify(request: Request):
+    """Recompute the hash chain over the whole log. Anyone holding an exported head hash can re-check it later."""
+    auth.require(request, "officer")
+    return db.verify_chain()
 
 
 @app.get("/audit.csv")
@@ -772,9 +892,9 @@ def audit_csv(request: Request):
     s = auth.require(request, "officer")
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["id", "time_utc", "actor", "kind", "fdr_id", "detail"])
+    w.writerow(["id", "time_utc", "actor", "kind", "fdr_id", "detail", "prev_hash", "hash"])
     for r in db.q("SELECT * FROM events ORDER BY id"):
-        w.writerow([r["id"], datetime.utcfromtimestamp(r["at"]).isoformat() + "Z", r["actor"], r["kind"], r["fdr_id"] or "", r["detail_json"]])
+        w.writerow([r["id"], datetime.utcfromtimestamp(r["at"]).isoformat() + "Z", r["actor"], r["kind"], r["fdr_id"] or "", r["detail_json"], r["prev_hash"] or "", r["hash"] or ""])
     db.event(auth.actor(s), "audit_exported")
     return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="scourge-audit.csv"'})
 

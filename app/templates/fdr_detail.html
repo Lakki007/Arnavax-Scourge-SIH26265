@@ -7,9 +7,14 @@
   <div>
     <p class="crumb"><a href="{{ '/register' if s.role == 'officer' else '/portal' }}">{{ 'Register' if s.role == 'officer' else 'My deposits' }}</a> <span aria-hidden="true">/</span> {{ f.id }}</p>
     <h1><span class="mono-title">{{ f.fd_number }}</span><span class="serif">{{ f.inst_name }}, {{ f.inst_city }}</span></h1>
+    {% if b.predecessor or b.successor %}<p class="small muted" id="renewal-links">
+      {% if b.predecessor %}Renews <a class="mono" href="/fdrs/{{ b.predecessor.id }}">{{ b.predecessor.fd_number }}</a> ({{ b.predecessor.id }}).{% endif %}
+      {% if b.successor %}Renewed into <a class="mono" href="/fdrs/{{ b.successor.id }}">{{ b.successor.fd_number }}</a> ({{ b.successor.id }}): {{ b.successor.status[1] }}.{% endif %}
+    </p>{% endif %}
   </div>
   <div class="head-status">{{ status(b.status) }}{% if b.status[2] %}<span class="muted small">{{ b.status[2] }}</span>{% endif %}</div>
 </div>
+{% if f.released_at %}<div class="note note-good" role="status" style="margin-bottom:24px"><b>Released.</b> <a href="/fdrs/{{ f.id }}/release-letter">Open the release letter</a>.</div>{% endif %}
 {% if request.query_params.get('registered') %}<div class="note note-good" role="status" style="margin-bottom:24px"><b>FDR registered.</b> Only paper vouches for it until a bank-session proof is verified and accepted.</div>{% endif %}
 
 {# ---- the one next step ---- #}
@@ -30,8 +35,15 @@
     {% elif nxt.kind == 'escalate' %}
       <button class="btn btn-danger" type="button" data-open="esc-dlg">Escalate</button>
       <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost">Request bank proof</button></form>
+    {% elif nxt.kind == 'release_pending' %}
+      {% if not nxt.mine %}
+      <form method="post" action="/fdrs/{{ f.id }}/release/approve"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-solid" {% if not gates.approve[0] %}disabled aria-describedby="why-ap"{% endif %}>Approve release</button></form>
+      {% if not gates.approve[0] %}<p class="why" id="why-ap">{{ gates.approve[1] }}</p>{% endif %}
+      {% endif %}
+      <button class="btn btn-ghost" type="button" data-open="rej-dlg">{{ 'Withdraw proposal' if nxt.mine else 'Reject' }}</button>
+      {% if nxt.mine %}<form method="post" action="/signin"><input type="hidden" name="role" value="officer:RB-02"><input type="hidden" name="next" value="/fdrs/{{ f.id }}"><button class="btn btn-quiet">Switch to officer RB-02 to approve</button></form>{% endif %}
     {% elif nxt.kind == 'release' %}
-      <button class="btn btn-solid" type="button" data-open="rel-dlg">Release deposit</button>
+      <button class="btn btn-solid" type="button" data-open="rel-dlg">Propose release</button>
       <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost">Request bank proof</button></form>
     {% elif nxt.kind in ('request', 'escalated') %}
       <form method="post" action="/fdrs/{{ f.id }}/challenge"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-solid" {% if not gates.challenge[0] %}disabled aria-describedby="why-ch"{% endif %}>Request bank proof</button></form>
@@ -110,12 +122,23 @@
   </form>
 </dialog>
 <dialog id="rel-dlg" aria-labelledby="rel-title">
-  <h2 id="rel-title">Release {{ f.fd_number }}?</h2>
-  <p class="muted small">Release is final in this demo. It is allowed only with an accepted bank-session confirmation from the last {{ DEMO.confirmation_valid_days }} days.</p>
+  <h2 id="rel-title">Propose release of {{ f.fd_number }}</h2>
+  <p class="muted small">Maker-checker: a second officer must approve before the deposit is released. Approval is allowed only while an accepted bank-session confirmation from the last {{ DEMO.confirmation_valid_days }} days is current.</p>
   <form method="post" action="/fdrs/{{ f.id }}/decide">
     <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="action" value="release"><input type="hidden" name="evidence_id" value="{{ latest.id }}">
     <div class="field"><label for="rel-note">Release order reference (at least 10 characters)</label><textarea id="rel-note" name="note" rows="2" minlength="10" required placeholder="e.g. RB/REL/2026/0142, 10-year term completed"></textarea></div>
-    <div class="actions"><button class="btn btn-solid">Release deposit</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
+    <div class="actions"><button class="btn btn-solid">Propose release</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
+  </form>
+</dialog>
+{% endif %}
+{% if s.role == 'officer' and b.release_request %}
+<dialog id="rej-dlg" aria-labelledby="rej-title">
+  <h2 id="rej-title">{{ 'Withdraw' if nxt.mine else 'Reject' }} the release proposal</h2>
+  <p class="muted small">Proposed by {{ b.release_request.proposed_by }}: “{{ b.release_request.note }}”.</p>
+  <form method="post" action="/fdrs/{{ f.id }}/release/reject">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="field"><label for="rej-note">Reason (at least 10 characters)</label><textarea id="rej-note" name="note" rows="2" minlength="10" required></textarea></div>
+    <div class="actions"><button class="btn btn-danger">{{ 'Withdraw' if nxt.mine else 'Reject' }}</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
   </form>
 </dialog>
 {% endif %}

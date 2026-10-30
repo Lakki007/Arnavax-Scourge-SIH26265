@@ -19,8 +19,11 @@ def _sign(payload: bytes) -> str:
     return hmac.new(SESSION_KEY.encode(), payload, hashlib.sha256).hexdigest()
 
 
-def make_cookie(role: str, institution_id: str | None) -> str:
-    data = json.dumps({"role": role, "inst": institution_id, "csrf": secrets.token_hex(16), "exp": time.time() + MAX_AGE}).encode()
+OFFICERS = {"RB-01": "Scrutiny officer", "RB-02": "Approving officer"}  # demo identities; real use: AICTE single sign-on
+
+
+def make_cookie(role: str, institution_id: str | None, who: str | None = None) -> str:
+    data = json.dumps({"role": role, "inst": institution_id, "who": who, "csrf": secrets.token_hex(16), "exp": time.time() + MAX_AGE}).encode()
     b = base64.urlsafe_b64encode(data).decode()
     return f"{b}.{_sign(data)}"
 
@@ -44,6 +47,11 @@ def read(request: Request):
 
 def actor(s) -> str:
     return "officer" if s["role"] == "officer" else f"institution:{s['inst']}"
+
+
+def officer_id(s) -> str:
+    """Which officer this is (for maker-checker). Older sessions without an identity are RB-01."""
+    return s.get("who") or "RB-01"
 
 
 def require(request: Request, role: str | None = None):

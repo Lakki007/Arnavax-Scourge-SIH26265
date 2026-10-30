@@ -80,10 +80,16 @@ def test_full_journey(page):
     expect(page.locator(".page-head .st")).to_have_text("Verified, awaiting officer")
     page.click("button:has-text('Accept as confirmed')")
     expect(page.locator(".page-head .st")).to_have_text("Confirmed by bank session")
-    page.click("button:has-text('Release deposit')")
+    page.click("button:has-text('Propose release')")
     page.fill("#rel-note", "RB/REL/2026/0142 term completed")
-    page.click("dialog[open] button:has-text('Release deposit')")
+    page.click("dialog[open] button:has-text('Propose release')")
+    expect(page.locator(".page-head .st")).to_have_text("Release proposed")
+    expect(page.locator("button:has-text('Approve release')")).to_have_count(0)   # maker cannot approve
+    page.click("button:has-text('Switch to officer RB-02 to approve')")
+    page.click("button:has-text('Approve release')")
     expect(page.locator(".page-head .st")).to_have_text("Released")
+    page.click("a:has-text('Open the release letter')")
+    expect(page.locator("h1")).to_contain_text("Release of security deposit")
     page.wait_for_timeout(700)
     page.screenshot(path=f"{SHOTS}/journey_5_released.png", full_page=True)
 

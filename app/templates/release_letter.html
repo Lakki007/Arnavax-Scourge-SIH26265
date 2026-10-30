@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Release letter {{ rel.letter_no }}{% endblock %}
+{% block main %}
+<article class="panel letter" style="max-width:760px;margin:0 auto;padding:36px">
+  <p class="small muted">SYNTHETIC DEMO DOCUMENT · not an official AICTE letter</p>
+  <h1 style="font-size:1.6em">Release of security deposit<span class="serif">Letter {{ rel.letter_no }}</span></h1>
+  <dl class="kv" style="margin-top:20px">
+    <dt>Date</dt><dd>{{ when(rel.decided_at) }}</dd>
+    <dt>Institution</dt><dd>{{ f.inst_name }}, {{ f.inst_city }} ({{ f.institution_id }})</dd>
+    <dt>Deposit</dt><dd class="mono">{{ f.fd_number }} ({{ f.id }})</dd>
+    <dt>Bank</dt><dd class="mono">{{ f.bank_host }}</dd>
+    <dt>Principal</dt><dd>{{ inr(f.principal) }}</dd>
+    <dt>Bank confirmation</dt><dd>Bank-session proof #{{ e.id }} of {{ when(e.received_at) }}: {{ LABEL[e.decision] }}</dd>
+    <dt>Proposed by</dt><dd>Officer {{ rel.proposed_by }}, {{ when(rel.proposed_at) }}: “{{ rel.note }}”</dd>
+    <dt>Approved by</dt><dd>Officer {{ rel.decided_by }}{% if rel.decision_note %}: “{{ rel.decision_note }}”{% endif %}</dd>
+    {% if audit_hash %}<dt>Audit entry hash</dt><dd class="mono small" style="word-break:break-all">{{ audit_hash }}</dd>{% endif %}
+  </dl>
+  <p class="small muted" style="margin-top:24px">This release was approved by two different officers against a current bank-session confirmation. The audit hash lets anyone check that this record is unchanged in AICTE's hash-chained log.</p>
+  <div class="actions" style="margin-top:20px"><button class="btn btn-ghost" onclick="window.print()">Print</button><a class="btn btn-quiet" href="/fdrs/{{ f.id }}">Back to {{ f.id }}</a></div>
+</article>
+{% endblock %}

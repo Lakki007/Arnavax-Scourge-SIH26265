@@ -494,3 +494,79 @@ def test_register_monitors_maturity_and_rechecks(off):
     assert "Needs attention" in page and "Maturing within 90 days" in page and "Re-check due" in page
     i = page.index("Maturing within 90 days")
     assert "FD-0000555999" in page[i:i + 2000]
+
+
+def test_audit_log_is_hash_chained_and_tamper_evident(off):
+    prove(off, "FDR-001")
+    v = off.get("/api/audit/verify").json()
+    assert v["ok"] and v["count"] > 3 and len(v["head"]) == 64
+    assert "Chain intact" in off.get("/audit").text
+    # an attacker with direct file access drops the append-only trigger and edits an old entry
+    c = db()
+    c.execute("DROP TRIGGER events_no_update")
+    c.execute("UPDATE events SET detail_json='{\"note\":\"edited\"}' WHERE id=2")
+    c.commit()
+    v = off.get("/api/audit/verify").json()
+    assert not v["ok"] and v["broken_at"] == 2
+    assert "Chain broken at entry #2" in off.get("/audit").text
+
+
+def _confirmed(off, fdr="FDR-001"):
+    j, cid = prove(off, fdr)
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    assert off.post(f"/fdrs/{fdr}/decide", action="accept", evidence_id=str(eid)).status_code == 303
+    return eid
+
+
+def test_release_needs_two_different_officers(off):
+    eid = _confirmed(off)
+    assert off.post("/fdrs/FDR-001/release/approve").status_code == 409                # nothing proposed yet
+    assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0142 term completed").status_code == 303
+    assert "Release proposed" in off.get("/fdrs/FDR-001").text
+    assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="second proposal attempt").status_code == 409
+    assert off.post("/fdrs/FDR-001/release/approve").status_code == 409                # maker cannot be checker
+    assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is None
+    inst = S("institution:INST-42")
+    assert inst.post("/fdrs/FDR-001/release/approve").status_code == 403               # institutions cannot approve
+    rb2 = S("officer:RB-02")
+    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
+    assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is not None
+    letter = rb2.get("/fdrs/FDR-001/release-letter").text
+    assert "AICTE/RB/REL/" in letter and "RB-01" in letter and "RB-02" in letter
+    assert inst.get("/fdrs/FDR-001/release-letter").status_code == 200                 # the institution gets its letter
+    assert off.get("/api/audit/verify").json()["ok"]
+
+
+def test_release_approval_blocked_when_confirmation_goes_stale(off):
+    eid = _confirmed(off)
+    off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0143 term completed")
+    c = db(); c.execute("UPDATE evidence SET received_at=received_at-31*86400 WHERE id=?", (eid,)); c.commit()
+    rb2 = S("officer:RB-02")
+    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 409
+    assert rb2.post("/fdrs/FDR-001/release/reject", note="short").status_code == 422
+    assert rb2.post("/fdrs/FDR-001/release/reject", note="Confirmation expired; ask for a fresh proof").status_code == 303
+    assert db().execute("SELECT state FROM release_requests WHERE fdr_id='FDR-001'").fetchone()[0] == "rejected"
+
+
+def test_renewal_links_old_and_new_fdr(off):
+    inst = S("institution:INST-42")
+    r = inst.post("/fdrs/new", renews="FDR-001", institution_id="INST-42", fd_number="FD-0000123999", bank_host="netbanking.mockbank.test",
+                  principal="1000000", issue_date="2025-01-01", maturity="2035-01-01")
+    assert r.status_code == 303, r.text
+    new = db().execute("SELECT id, renews_fdr_id FROM fdrs WHERE fd_number='FD-0000123999'").fetchone()
+    assert new[1] == "FDR-001"
+    FD[new[0]] = "FD-0000123999"
+    page = off.get("/fdrs/FDR-001").text
+    assert "Renewed into" in page and "FD-0000123999" in page
+    assert "Renews" in off.get(f"/fdrs/{new[0]}").text
+    # a second renewal of the same FDR, or renewing another institution's FDR, is refused
+    assert inst.post("/fdrs/new", renews="FDR-001", institution_id="INST-42", fd_number="FD-0000124000", bank_host="netbanking.mockbank.test",
+                     principal="1000000", issue_date="2025-01-01", maturity="2035-01-01").status_code == 422
+    assert inst.post("/fdrs/new", renews="FDR-003", institution_id="INST-42", fd_number="FD-0000124001", bank_host="netbanking.mockbank.test",
+                     principal="1000000", issue_date="2025-01-01", maturity="2035-01-01").status_code == 422
+    # once the bank confirms the renewed deposit, the old one counts as renewed and cannot be released separately
+    assert off.post("/mockbank/open", fd_number="FD-0000123999").status_code == 303
+    _confirmed(off, new[0])
+    assert "Renewed" in off.get("/fdrs/FDR-001").text
+    eid_old = db().execute("SELECT COALESCE(MAX(id),0) FROM evidence WHERE fdr_id='FDR-001'").fetchone()[0]
+    assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid_old), note="should not release old").status_code == 409

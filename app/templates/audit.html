@@ -4,9 +4,13 @@
 <div class="page-head">
   <div>
     <h1>Audit log<span class="serif">Every request, proof and decision, in order.</span></h1>
-    <p class="lede">Append-only: the database rejects edits and deletions of entries. Only "Reset demo" clears it, and the reset itself is the first new entry.</p>
+    <p class="lede">Append-only and hash-chained: the database rejects edits and deletions, and every entry carries the SHA-256 of the one before it, so any change made to the file directly breaks the chain. Only "Reset demo" clears it, and the reset itself is the first new entry.</p>
   </div>
   <a class="btn btn-ghost" href="/audit.csv">Export CSV</a>
+</div>
+<div class="note {{ 'note-good' if chain.ok else 'note-bad' }}" role="status" id="chain-status" style="margin-bottom:20px">
+  {% if chain.ok %}<b>Chain intact.</b> All {{ chain.count }} entries re-checked just now. Head hash <span class="mono small">{{ chain.head[:16] }}…</span>{% else %}<b>Chain broken at entry #{{ chain.broken_at }}:</b> {{ chain.problem }}. Entries after it cannot be trusted.{% endif %}
+  <a class="small" href="/api/audit/verify" style="margin-left:8px">Verify (JSON)</a>
 </div>
 <form class="toolbar" method="get">
   <div class="field"><label for="kind">Event type</label>

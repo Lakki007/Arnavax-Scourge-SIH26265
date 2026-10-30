@@ -27,7 +27,7 @@
     </nav>
     <div class="top-right">
       {% if s %}
-        <div class="who">{% if s.role == 'officer' %}<b>AICTE officer</b>Regulation Bureau{% else %}<b>Institution</b>{{ s.inst }}{% endif %}</div>
+        <div class="who">{% if s.role == 'officer' %}<b>AICTE officer {{ s.who or 'RB-01' }}</b>Regulation Bureau{% else %}<b>Institution</b>{{ s.inst }}{% endif %}</div>
         <form method="post" action="/signout"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button class="btn btn-ghost btn-sm">Sign out</button></form>
       {% else %}
         <a class="btn btn-ghost btn-sm" href="/how">How it works</a>

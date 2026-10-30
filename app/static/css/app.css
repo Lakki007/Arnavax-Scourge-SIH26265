@@ -88,9 +88,9 @@ button.link { background: none; border: 0; padding: 0; color: var(--ink-2); font
 .st-discrepancy { color: var(--coral); background: var(--coral-soft); border-color: rgba(255,138,107,.32); }
 .st-insufficient_evidence, .st-stale { color: var(--amber); background: var(--amber-soft); border-color: rgba(255,207,112,.3); }
 .st-rejected, .st-escalated { color: var(--rose); background: var(--rose-soft); border-color: rgba(255,107,139,.32); }
-.st-requested { color: var(--violet); background: var(--violet-soft); border-color: rgba(139,108,255,.4); }
+.st-requested, .st-release_pending { color: var(--violet); background: var(--violet-soft); border-color: rgba(139,108,255,.4); }
 .st-submitted { color: var(--ink-2); background: #111113; border-color: var(--line-2); }
-.st-released { color: var(--ink); background: #18181b; border-color: var(--line-2); }
+.st-released, .st-renewed { color: var(--ink); background: #18181b; border-color: var(--line-2); }
 
 /* layout */
 main { flex: 1; padding: var(--s5) clamp(16px, 4vw, 56px) var(--s8); position: relative; z-index: 2; width: 100%; max-width: 1240px; margin: 0 auto; }

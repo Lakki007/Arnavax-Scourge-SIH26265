@@ -1,4 +1,6 @@
-"""SQLite persistence. The events table is append-only (enforced by triggers)."""
+"""SQLite persistence. The events table is append-only (enforced by triggers) and hash-chained:
+each entry stores the SHA-256 of the previous entry, so any later edit to the file breaks the chain."""
+import hashlib
 import json
 import sqlite3
 import threading
@@ -15,7 +17,7 @@ CREATE TABLE IF NOT EXISTS fdrs(
   id TEXT PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id),
   fd_number TEXT NOT NULL UNIQUE, bank_host TEXT NOT NULL, principal TEXT NOT NULL,
   issue_date TEXT NOT NULL, maturity TEXT NOT NULL, created_at REAL NOT NULL, created_by TEXT NOT NULL,
-  released_at REAL);
+  released_at REAL, renews_fdr_id TEXT);
 CREATE TABLE IF NOT EXISTS challenges(
   id TEXT PRIMARY KEY, fdr_id TEXT NOT NULL REFERENCES fdrs(id), institution_id TEXT NOT NULL,
   token TEXT NOT NULL, token_sha256 TEXT NOT NULL, issued_at REAL NOT NULL, expires_at REAL NOT NULL,
@@ -36,7 +38,12 @@ CREATE TABLE IF NOT EXISTS baseline_uploads(
   size INTEGER NOT NULL, sha256 TEXT NOT NULL, stored_as TEXT NOT NULL, uploaded_at REAL NOT NULL, actor TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events(
   id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, actor TEXT NOT NULL, kind TEXT NOT NULL,
-  fdr_id TEXT, detail_json TEXT NOT NULL);
+  fdr_id TEXT, detail_json TEXT NOT NULL, prev_hash TEXT, hash TEXT);
+CREATE TABLE IF NOT EXISTS release_requests(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER NOT NULL,
+  proposed_by TEXT NOT NULL, proposed_at REAL NOT NULL, note TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn')),
+  decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 """
@@ -58,7 +65,18 @@ def conn() -> sqlite3.Connection:
         if _conn is None:
             _conn = connect()
             _conn.executescript(SCHEMA)
+            _migrate(_conn)
         return _conn
+
+
+def _migrate(c):
+    """Add columns introduced after a database was first created (older demo databases)."""
+    cols = {r[1] for r in c.execute("PRAGMA table_info(events)")}
+    for col in ("prev_hash", "hash"):
+        if col not in cols:
+            c.execute(f"ALTER TABLE events ADD COLUMN {col} TEXT")
+    if "renews_fdr_id" not in {r[1] for r in c.execute("PRAGMA table_info(fdrs)")}:
+        c.execute("ALTER TABLE fdrs ADD COLUMN renews_fdr_id TEXT")
 
 
 def q(sql, args=()):
@@ -91,9 +109,36 @@ def tx(fn):
             raise
 
 
+GENESIS = "0" * 64
+
+
+def chain_hash(prev: str, at: float, actor: str, kind: str, fdr_id, detail_json: str) -> str:
+    """SHA-256 over the previous hash and this entry's fields, in a fixed canonical form."""
+    body = json.dumps([prev, repr(float(at)), actor, kind, fdr_id, detail_json], separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
 def event(actor: str, kind: str, fdr_id=None, **detail):
-    x("INSERT INTO events(at,actor,kind,fdr_id,detail_json) VALUES(?,?,?,?,?)",
-      (time.time(), actor, kind, fdr_id, json.dumps(detail, default=str)))
+    with _lock:  # read-then-append must not interleave with another writer in this process
+        last = conn().execute("SELECT hash FROM events ORDER BY id DESC LIMIT 1").fetchone()
+        prev = (last["hash"] if last and last["hash"] else GENESIS)
+        at, dj = time.time(), json.dumps(detail, default=str)
+        x("INSERT INTO events(at,actor,kind,fdr_id,detail_json,prev_hash,hash) VALUES(?,?,?,?,?,?,?)",
+          (at, actor, kind, fdr_id, dj, prev, chain_hash(prev, at, actor, kind, fdr_id, dj)))
+
+
+def verify_chain():
+    """Recompute every link. Returns {ok, count, head, broken_at, problem}."""
+    prev, n, head = GENESIS, 0, GENESIS
+    for r in q("SELECT * FROM events ORDER BY id"):
+        n += 1
+        if r["prev_hash"] != prev:
+            return {"ok": False, "count": n, "head": head, "broken_at": r["id"], "problem": "link to the previous entry does not match"}
+        h = chain_hash(prev, r["at"], r["actor"], r["kind"], r["fdr_id"], r["detail_json"])
+        if r["hash"] != h:
+            return {"ok": False, "count": n, "head": head, "broken_at": r["id"], "problem": "entry contents changed after it was written"}
+        prev = head = h
+    return {"ok": True, "count": n, "head": head, "broken_at": None, "problem": None}
 
 
 def wipe():

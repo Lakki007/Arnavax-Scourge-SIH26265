@@ -112,11 +112,22 @@ def claim_vs_witness(fdr, match):
     return out
 
 
-def next_action(b, gates):
+def next_action(b, gates, who=None):
     """The single most useful next step for the officer, derived from the same gates the server enforces."""
     st = b["status"][0]
     if st == "released":
-        return {"kind": "done", "title": "Released", "text": "This deposit has been released. No further action."}
+        return {"kind": "done", "title": "Released", "text": "Approved by two officers against a current bank confirmation. The release letter is ready."}
+    if st == "renewed":
+        sc = b["successor"]
+        return {"kind": "done", "title": f"Renewed into {sc['id']}",
+                "text": f"The renewed deposit {sc['fd_number']} is confirmed by the bank and is the one AICTE now holds."}
+    rel = b.get("release_request")
+    if rel:
+        mine = who == rel["proposed_by"]
+        return {"kind": "release_pending", "title": f"Release proposed by {rel['proposed_by']}",
+                "text": ("Waiting for a second officer to approve it (maker-checker). You can withdraw your proposal." if mine else
+                         "Review the proposal and the bank confirmation, then approve or reject. You cannot approve your own proposal."),
+                "mine": mine}
     if st == "escalated":
         return {"kind": "escalated", "title": "Escalated",
                 "text": "Handled outside the portal. You can request a fresh proof once the institution has resolved it."}
@@ -134,6 +145,6 @@ def next_action(b, gates):
                 "text": "Escalate with a reason, or request a fresh proof if the institution can fix the cause."}
     if gates["release"][0]:
         return {"kind": "release", "title": "Confirmed by the bank's server",
-                "text": "You can release the deposit, or request a fresh proof first."}
+                "text": "You can propose the release; a second officer approves it. Or request a fresh proof first."}
     return {"kind": "request", "title": "Only paper vouches for this deposit",
             "text": "Ask the institution to prove it from its bank's server. It takes about a second once they answer."}

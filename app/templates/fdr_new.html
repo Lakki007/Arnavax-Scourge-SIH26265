@@ -25,6 +25,14 @@
     </select>
     {% if errors.get('institution_id') %}<span class="err">{{ errors.institution_id }}</span>{% endif %}
   </div>
+  <div class="field">
+    <label for="renews">Renewal of an existing FDR? (optional)</label>
+    <select id="renews" name="renews" {% if errors.get('renews') %}aria-invalid="true"{% endif %}>
+      <option value="">No, this is a new deposit</option>
+      {% for r in renewable or [] %}<option value="{{ r.id }}" {% if v.get('renews') == r.id %}selected{% endif %}>Renews {{ r.fd_number }} ({{ r.id }}, matures {{ r.maturity }})</option>{% endfor %}
+    </select>
+    {% if errors.get('renews') %}<span class="err">{{ errors.renews }}</span>{% else %}<span class="hint">Links the new FDR to the one it replaces. The old one counts as renewed once the new one is confirmed by the bank.</span>{% endif %}
+  </div>
   {{ fld('fd_number', 'FD number', 'As printed on the receipt. Example: FD-0000888888.', ph='FD-0000888888') }}
   <div class="field">
     <label for="bank_host">Issuing bank (approved for bank-session proofs)</label>
