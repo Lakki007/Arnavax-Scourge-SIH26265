@@ -19,7 +19,7 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, eadvice, jobs, policy, procs, seed, views
+from . import auth, db, eadvice, jobs, lifecycle, policy, procs, seed, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
 HERE = Path(__file__).parent
@@ -51,7 +51,7 @@ def ago(t):
     return f"{int(d // 86400)} days ago"
 
 
-T.env.globals.update(inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
+T.env.globals.update(DEPTS=lifecycle.RULES['release']['departments'], inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
 T.env.filters["fromjson"] = json.loads
 
 
@@ -87,6 +87,10 @@ def fdr_bundle(fid, _depth=0):
         st = ("on_hold", "On hold", hold["reason"][:80])
     b = {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st, "base_status": base,
          "release_request": rel, "predecessor": pred, "successor": succ, "hold": hold}
+    if rel:
+        b["clearances"] = {c["dept"]: c for c in db.q("SELECT * FROM release_clearances WHERE release_id=?", (rel["id"],))}
+        b["approvals"] = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
+        b["signers_needed"] = 2 if float(f["principal"]) >= lifecycle.RULES["release"]["second_signer_from_rupees"] else 1
     b["eadvice"] = eadvice_state(b)
     return b
 
@@ -310,7 +314,16 @@ def register(request: Request, q: str = "", status: str = "", page: int = 1):
     bank_ok = sum(1 for r in allr if latest_dec(r) == "verified")
     bank_bad = sum(1 for r in allr if latest_dec(r) == "discrepancy")
     paper = sum(1 for r in allr if latest_dec(r) not in ("verified", "discrepancy") and r["status"][0] != "released")
-    return render(request, "register.html", s, rows=rows, monitor=monitor(allr), q=q, fstatus=status, counts=counts, total=len(allr), paper=paper, bank_ok=bank_ok, bank_bad=bank_bad,
+    bb = {}
+    for r in allr:
+        bb.setdefault(r["f"]["institution_id"], []).append(r)
+    for i in db.q("SELECT id FROM institutions"):
+        bb.setdefault(i["id"], [])
+    lifecycle.run_daily(bb)
+    mon = monitor(allr)
+    mon["shortfall"] = [(iid, a) for iid, a in ((iid, lifecycle.adequacy(iid, v)) for iid, v in bb.items()) if a["shortfall_filed"] > 0]
+    mon["termgap"] = [(r, lifecycle.term_gap(r["f"])) for r in allr if r["status"][0] not in ("released", "renewed") and lifecycle.term_gap(r["f"])]
+    return render(request, "register.html", s, rows=rows, monitor=mon, q=q, fstatus=status, counts=counts, total=len(allr), paper=paper, bank_ok=bank_ok, bank_bad=bank_bad,
                   matched=matched, page=page, pages=pages)
 
 
@@ -480,7 +493,16 @@ def action_gates(b):
         elif st != "confirmed":
             g["approve"] = (False, f"The bank confirmation is no longer current ({b['base_status'][1]}). Reject, or request a fresh proof.")
         else:
-            g["approve"] = (True, "")
+            depts = lifecycle.RULES["release"]["departments"]
+            cl = b.get("clearances", {})
+            objected = [d for d, c in cl.items() if c["decision"] == "object"]
+            missing = [d for d in depts if d not in cl]
+            if objected:
+                g["approve"] = (False, f"Objection from {', '.join(depts[d] for d in objected)}. Reject the proposal or resolve the objection.")
+            elif missing:
+                g["approve"] = (False, f"Waiting for clearance from {', '.join(depts[d] for d in missing)}.")
+            else:
+                g["approve"] = (True, "")
     g["withdraw"] = (True, "") if challenge_live(b["open"]) else (False, "No open challenge.")
     return g
 
@@ -559,11 +581,21 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
     rel, who, now = b["release_request"], auth.officer_id(s), time.time()
     if who == rel["proposed_by"]:
         raise HTTPException(409, "Maker-checker: the officer who proposed a release cannot approve it. Sign in as another officer.")
+    signed_by = [a["officer"] for a in b["approvals"]]
+    if who in signed_by:
+        raise HTTPException(409, "You have already signed this release. A different officer must add the second signature.")
+    if len(signed_by) + 1 < b["signers_needed"]:
+        db.x("INSERT INTO release_approvals(release_id,officer,at) VALUES(?,?,?)", (rel["id"], who, now))
+        db.event(f"officer:{who}", "release_signed", fid, release=rel["id"], signature=len(signed_by) + 1, of=b["signers_needed"])
+        return RedirectResponse(f"/fdrs/{fid}", 303)
+    db.x("INSERT INTO release_approvals(release_id,officer,at) VALUES(?,?,?)", (rel["id"], who, now))
+    approvers = signed_by + [who]
     letter = f"AICTE/RB/REL/{datetime.utcfromtimestamp(now).year}/{rel['id']:04d}"
     f = b["f"]
     signed = {"type": "aicte-pledge-release/v1", "letter_no": letter, "fdr_id": fid, "fd_number": f["fd_number"],
               "bank_host": f["bank_host"], "institution_id": f["institution_id"], "principal": f["principal"],
-              "proposed_by": rel["proposed_by"], "approved_by": who, "bank_proof_evidence_id": rel["evidence_id"],
+              "proposed_by": rel["proposed_by"], "approved_by": who, "signed_by": approvers,
+              "clearances": sorted(b["clearances"]), "bank_proof_evidence_id": rel["evidence_id"],
               "approved_at": int(now)}
     signed_json = json.dumps(signed, sort_keys=True, separators=(",", ":"))
     signature = base64.b64encode(AICTE_SIGNING_KEY.sign(signed_json.encode())).decode()
@@ -608,7 +640,11 @@ def release_letter(request: Request, fid: str):
         raise HTTPException(404, "No approved release for this FDR.")
     e = db.q1("SELECT * FROM evidence WHERE id=?", (rel["evidence_id"],))
     ev = db.q1("SELECT hash FROM events WHERE kind='release_approved' AND fdr_id=? ORDER BY id DESC", (fid,))
-    return render(request, "release_letter.html", s, b=b, f=b["f"], rel=rel, e=e, audit_hash=(ev or {}).get("hash"))
+    qr_url, qr_svg = letter_qr(request, rel) if rel["signed_json"] else (None, None)
+    clear = db.q("SELECT * FROM release_clearances WHERE release_id=? ORDER BY at", (rel["id"],))
+    signers = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
+    return render(request, "release_letter.html", s, b=b, f=b["f"], rel=rel, e=e, audit_hash=(ev or {}).get("hash"), qr_url=qr_url, qr_svg=qr_svg,
+                  clear=clear, signers=signers, DEPTS=lifecycle.RULES["release"]["departments"])
 
 
 def _aicte_public_pem():
@@ -783,7 +819,10 @@ def portal(request: Request, notfound: str = ""):
     open_ch = [c for c in db.q("SELECT c.*, f.fd_number FROM challenges c JOIN fdrs f ON f.id=c.fdr_id WHERE c.institution_id=? AND c.state='issued' ORDER BY c.issued_at DESC", (s["inst"],)) if challenge_live(c)]
     recent_jobs = db.q("SELECT j.*, f.fd_number FROM jobs j JOIN fdrs f ON f.id=j.fdr_id WHERE j.institution_id=? ORDER BY j.started_at DESC LIMIT 6", (s["inst"],))
     inst = db.q1("SELECT * FROM institutions WHERE id=?", (s["inst"],))
-    return render(request, "portal.html", s, rows=rows, open_ch=open_ch, recent_jobs=recent_jobs, inst=inst, notfound=notfound)
+    adq = lifecycle.adequacy(s["inst"], rows)
+    lifecycle.run_daily({s["inst"]: rows})
+    notes = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience='institution' AND institution_id=? ORDER BY id DESC LIMIT 5", (s["inst"],))
+    return render(request, "portal.html", s, rows=rows, open_ch=open_ch, recent_jobs=recent_jobs, inst=inst, notfound=notfound, adq=adq, notes=notes)
 
 
 def own_challenge(s, cid):
@@ -1040,6 +1079,135 @@ def mockbank_open(request: Request, csrf: str = Form(""), fd_number: str = Form(
     seed.write_bank_state(st)
     db.event("officer", "mock_bank_deposit_opened", f["id"], fd_number=fd_number, bank_principal=f"{float(bp):.2f}", register_principal=f["principal"])
     return RedirectResponse("/mockbank#" + fd_number, 303)
+
+
+# ----------------------------------------------------------------- release clearance (multi-department)
+@app.post("/fdrs/{fid}/release/clear")
+def release_clear(request: Request, fid: str, csrf: str = Form(""), dept: str = Form(""), decision: str = Form("clear"), note: str = Form("")):
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    rel = b["release_request"]
+    depts = lifecycle.RULES["release"]["departments"]
+    if not rel:
+        raise HTTPException(409, "No release has been proposed.")
+    if dept not in depts or decision not in ("clear", "object"):
+        raise HTTPException(400, "Unknown department or decision.")
+    if dept in b["clearances"]:
+        raise HTTPException(409, f"{depts[dept]} has already recorded its decision.")
+    note = note.strip()
+    if decision == "object" and len(note) < 10:
+        raise HTTPException(422, "An objection needs a reason of at least 10 characters.")
+    who = auth.officer_id(s)
+    db.x("INSERT INTO release_clearances(release_id,dept,decision,officer,at,note) VALUES(?,?,?,?,?,?)",
+         (rel["id"], dept, decision, who, time.time(), note[:300]))
+    db.event(f"officer:{who}", f"release_{'cleared' if decision == 'clear' else 'objection'}", fid, release=rel["id"], dept=dept, note=note[:300])
+    return RedirectResponse(f"/fdrs/{fid}#release", 303)
+
+
+# ----------------------------------------------------------------- public verification of a signed release letter
+@app.get("/verify", response_class=HTMLResponse)
+def verify_release(request: Request, d: str = "", sig: str = ""):
+    """Anyone (e.g. the bank) scans the QR on a release letter; the page checks AICTE's Ed25519 signature."""
+    result, payload = None, None
+    if d and sig:
+        try:
+            raw = base64.urlsafe_b64decode(d + "=" * (-len(d) % 4))
+            AICTE_SIGNING_KEY.public_key().verify(base64.urlsafe_b64decode(sig + "=" * (-len(sig) % 4)), raw)
+            payload, result = json.loads(raw), "valid"
+            rel = db.q1("SELECT state FROM release_requests WHERE letter_no=?", (payload.get("letter_no"),))
+            if not rel:
+                result = "valid_unknown"   # signature valid, but this portal has no record (e.g. after a demo reset)
+        except Exception:
+            result = "invalid"
+    return render(request, "verify.html", auth.read(request), result=result, payload=payload)
+
+
+def letter_qr(request, rel):
+    import qrcode
+    import qrcode.image.svg
+    d = base64.urlsafe_b64encode(rel["signed_json"].encode()).decode().rstrip("=")
+    sg = base64.urlsafe_b64encode(base64.b64decode(rel["signature"])).decode().rstrip("=")
+    url = f"{str(request.base_url).rstrip('/')}/verify?d={d}&sig={sg}"
+    img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, box_size=6, border=2)
+    buf = io.BytesIO()
+    img.save(buf)
+    return url, base64.b64encode(buf.getvalue()).decode()
+
+
+# ----------------------------------------------------------------- institutions: deposit adequacy (APH Table 1.4)
+def bundles_by_inst(only=None):
+    out = {}
+    for r in db.q("SELECT id, institution_id FROM fdrs ORDER BY id"):
+        if only and r["institution_id"] != only:
+            continue
+        out.setdefault(r["institution_id"], []).append(fdr_bundle(r["id"]))
+    for i in db.q("SELECT id FROM institutions"):
+        if not only or i["id"] == only:
+            out.setdefault(i["id"], [])
+    return out
+
+
+@app.get("/institutions", response_class=HTMLResponse)
+def institutions_page(request: Request):
+    s = auth.require(request, "officer")
+    bb = bundles_by_inst()
+    rows = []
+    for inst in db.q("SELECT * FROM institutions ORDER BY id"):
+        a = lifecycle.adequacy(inst["id"], bb.get(inst["id"], []))
+        gaps = [(b["f"], lifecycle.term_gap(b["f"])) for b in bb.get(inst["id"], []) if b["status"][0] not in ("released", "renewed") and lifecycle.term_gap(b["f"])]
+        rows.append({"i": inst, "a": a, "gaps": gaps})
+    return render(request, "institutions.html", s, rows=rows, RULES=lifecycle.RULES)
+
+
+@app.post("/institutions/{iid}/profile")
+async def institution_profile(request: Request, iid: str):
+    s = auth.require(request, "officer")
+    form = await request.form()
+    auth.check_csrf(s, form.get("csrf"))
+    if not db.q1("SELECT 1 AS x FROM institutions WHERE id=?", (iid,)):
+        raise HTTPException(404, "No such institution.")
+    progs = []
+    for v in form.getlist("prog"):
+        prog, _, level = v.partition(":")
+        if prog in lifecycle.RULES["programmes"] and lifecycle.RULES["programmes"][prog].get(level) is not None:
+            progs.append([prog, level])
+    exempt = form.get("exempt") or None
+    if exempt and exempt not in lifecycle.RULES["exemptions"]:
+        raise HTTPException(400, "Unknown exemption.")
+    leased = 1 if form.get("leased") else 0
+    db.x("INSERT INTO institution_profile(institution_id,programmes_json,leased,exempt) VALUES(?,?,?,?) "
+         "ON CONFLICT(institution_id) DO UPDATE SET programmes_json=excluded.programmes_json, leased=excluded.leased, exempt=excluded.exempt",
+         (iid, json.dumps(progs), leased, exempt))
+    db.event(auth.actor(s), "institution_profile_updated", None, institution=iid, programmes=progs, leased=leased, exempt=exempt)
+    return RedirectResponse(f"/institutions#{iid}", 303)
+
+
+# ----------------------------------------------------------------- notifications: reminder and escalation ladder
+@app.get("/notifications", response_class=HTMLResponse)
+def notifications_page(request: Request, audience: str = ""):
+    s = auth.require(request)
+    if s["role"] == "officer":
+        lifecycle.run_daily(bundles_by_inst())
+        rows = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience!='institution' AND (?='' OR audience=?) ORDER BY id DESC LIMIT 300", (audience, audience))
+        outbox = db.q1("SELECT COUNT(*) AS n FROM notifications WHERE channel='email'")["n"]
+    else:
+        lifecycle.run_daily(bundles_by_inst(s["inst"]))
+        rows = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience='institution' AND institution_id=? ORDER BY id DESC LIMIT 300", (s["inst"],))
+        outbox = db.q1("SELECT COUNT(*) AS n FROM notifications WHERE channel='email' AND audience='institution' AND institution_id=?", (s["inst"],))["n"]
+    return render(request, "notifications.html", s, rows=rows, outbox=outbox, audience=audience, LADDER=lifecycle.LADDER)
+
+
+@app.post("/notifications/run")
+def notifications_run(request: Request, csrf: str = Form(""), as_of: str = Form("")):
+    """Run the daily check now; an officer may run it 'as of' a future date to preview the ladder (demo time machine)."""
+    s = officer_post(request, csrf)
+    try:
+        d = date.fromisoformat(as_of) if as_of else date.today()
+    except ValueError:
+        raise HTTPException(422, "Enter a valid date.")
+    n = lifecycle.run_daily(bundles_by_inst(), d)
+    db.event(auth.actor(s), "daily_check_run", None, as_of=d.isoformat(), added=n)
+    return RedirectResponse("/notifications?ran=" + str(n), 303)
 
 
 # ----------------------------------------------------------------- audit + system

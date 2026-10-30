@@ -62,6 +62,27 @@
 {% if latest and latest.decision == 'rejected' %}<p class="note note-bad" style="margin-top:16px"><b>The latest proof was rejected:</b> {{ reason }} Nothing it contained is treated as the bank's word.</p>{% endif %}
 {% if latest and latest.decision == 'insufficient_evidence' and reason %}<p class="note note-warn" style="margin-top:16px"><b>Not enough to decide:</b> {{ reason }}</p>{% endif %}
 
+{# ---- release clearance and signatures ---- #}
+{% if b.release_request %}{% set rr = b.release_request %}
+<section class="panel" id="release" style="margin-top:20px;padding:20px">
+  <h2 style="margin-top:0">Release: clearances and signatures</h2>
+  <p class="muted small">Proposed by {{ rr.proposed_by }}: “{{ rr.note }}”. Every department must clear; {{ b.signers_needed }} officer signature{{ 's' if b.signers_needed > 1 }} needed besides the proposer{% if b.signers_needed > 1 %} (₹1 crore or more){% endif %}.</p>
+  <div class="table-wrap"><table><thead><tr><th>Department</th><th>Decision</th></tr></thead><tbody>
+  {% for dk, dl in DEPTS.items() %}{% set c = b.clearances.get(dk) %}<tr id="clr-{{ dk }}"><td>{{ dl }}</td><td>{% if c %}<span class="st {{ 'st-confirmed' if c.decision == 'clear' else 'st-discrepancy' }}">{{ 'Cleared' if c.decision == 'clear' else 'Objection' }}</span> <span class="muted small">by {{ c.officer }}{% if c.note %}: {{ c.note }}{% endif %}</span>{% else %}<span class="muted small">pending</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <p class="small" style="margin-top:10px">Signatures: {% for a in b.approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% else %}none yet{% endfor %} ({{ b.approvals|length }} of {{ b.signers_needed }}).</p>
+  {% if s.role == 'officer' %}
+  <form method="post" action="/fdrs/{{ f.id }}/release/clear" class="actions" style="margin-top:8px;align-items:flex-end">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="field" style="margin:0"><label for="clr-dept">Department</label><select id="clr-dept" name="dept">{% for dk, dl in DEPTS.items() %}{% if dk not in b.clearances %}<option value="{{ dk }}">{{ dl }}</option>{% endif %}{% endfor %}</select></div>
+    <div class="field" style="margin:0"><label for="clr-note">Note</label><input id="clr-note" name="note" placeholder="required for an objection"></div>
+    <button class="btn btn-quiet btn-sm" name="decision" value="clear">Clear</button>
+    <button class="btn btn-ghost btn-sm" name="decision" value="object">Object</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
 {# ---- field-level fallback: bank-signed e-advice ---- #}
 {% if latest and latest.decision == 'insufficient_evidence' %}
 <section class="panel" id="eadvice" style="margin-top:20px;padding:20px">

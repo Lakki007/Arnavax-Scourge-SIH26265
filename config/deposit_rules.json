@@ -1,0 +1,24 @@
+{
+  "_source": "AICTE Approval Process Handbook 2024-25 to 2026-27, Table 1.4: Security Deposit (in Lakh) applicable for Institutions under Different Programme(s). Notes: DOUBLE for private leased building/land; deposit stays with the Council for 10 years; not required for Government / Government-aided institutions; exemptions under Clause 1.12.",
+  "_aggregation_note": "Summing across programme levels offered is our reading for multi-programme institutions; confirm with AICTE before production.",
+  "unit_rupees": 100000,
+  "term_years": 10,
+  "leased_multiplier": 2,
+  "aggregation": "sum",
+  "levels": {"diploma": "Diploma / Post Diploma", "ug": "Under Graduate", "pg": "Post Graduate Diploma / Post Graduate Degree"},
+  "programmes": {
+    "engineering":           {"label": "Engineering and Technology", "diploma": 15, "ug": 35, "pg": 15},
+    "planning":              {"label": "Planning", "diploma": 15, "ug": 15, "pg": 15},
+    "applied_arts":          {"label": "Applied Arts and Crafts", "diploma": 15, "ug": 15, "pg": 15},
+    "design":                {"label": "Design", "diploma": 15, "ug": 15, "pg": 15},
+    "hmct":                  {"label": "Hotel Management and Catering Technology", "diploma": 15, "ug": 15, "pg": 15},
+    "computer_applications": {"label": "Computer Applications (BCA, MCA, etc.)", "diploma": null, "ug": 5, "pg": 15},
+    "management":            {"label": "Management (BBA, MBA, etc.)", "diploma": null, "ug": 5, "pg": 15}
+  },
+  "exemptions": {
+    "government": "Government or Government-aided institution",
+    "clause_1_12": "Exempt under Clause 1.12 (e.g. existing institution under Clause 1.3.3 for more than 5 years)"
+  },
+  "reminders": {"maturity_days": [90, 60, 30, 7], "escalation_after_days": {"officer": 0, "regional_head": 7, "authority": 21}, "recheck_every_days": 30},
+  "release": {"departments": {"PGRC": "Public Grievance Redressal Cell", "VIG": "Vigilance", "FIN": "Finance and Grants"}, "second_signer_from_rupees": 10000000}
+}

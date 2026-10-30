@@ -11,6 +11,11 @@
 </div>
 {% if notfound %}<div class="note note-warn" role="status" style="margin-bottom:20px">No deposit <span class="mono">{{ notfound }}</span> is registered for your institution.</div>{% endif %}
 
+<section class="panel" style="padding:16px;margin-bottom:24px" id="adequacy">
+  <b>Security deposit (AICTE APH Table 1.4):</b> required {{ inr(adq.required) }} · filed {{ inr(adq.filed) }} · bank-confirmed {{ inr(adq.confirmed) }}.
+  {% if adq.shortfall_filed > 0 %}<span class="st st-discrepancy">Shortfall {{ inr(adq.shortfall_filed) }}</span>{% else %}<span class="st st-confirmed">Adequate as filed</span>{% endif %}
+  {% if notes %}<ul class="small" style="margin:10px 0 0;padding-left:18px">{% for n in notes %}<li><b>{{ n.title }}</b>: {{ n.body }}</li>{% endfor %}</ul><a class="small" href="/notifications">All alerts</a>{% endif %}
+</section>
 <section aria-labelledby="open-h" style="margin-bottom:36px">
   <h2 id="open-h">Open requests from AICTE</h2>
   {% if open_ch %}

@@ -19,7 +19,7 @@ def _sign(payload: bytes) -> str:
     return hmac.new(SESSION_KEY.encode(), payload, hashlib.sha256).hexdigest()
 
 
-OFFICERS = {"RB-01": "Scrutiny officer", "RB-02": "Approving officer"}  # demo identities; real use: AICTE single sign-on
+OFFICERS = {"RB-01": "Scrutiny officer", "RB-02": "Approving officer", "RB-03": "Competent authority (second signer)"}  # demo identities; real use: AICTE single sign-on
 
 
 def make_cookie(role: str, institution_id: str | None, who: str | None = None) -> str:

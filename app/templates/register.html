@@ -22,6 +22,20 @@
     </div>
     {% endfor %}
   </div>
+  <div class="grid-4" style="margin-top:12px">
+    <div class="panel" style="padding:14px" id="mon-shortfall">
+      <div><b style="font-size:1.4em">{{ m.shortfall|length }}</b> <span>Deposit shortfall</span></div>
+      <div class="muted small">less filed than APH Table 1.4 requires</div>
+      {% for iid, a in m.shortfall[:3] %}<div class="small"><a href="/institutions#{{ iid }}">{{ iid }}</a> <span class="muted">short {{ inr(a.shortfall_filed) }}</span></div>{% endfor %}
+    </div>
+    <div class="panel" style="padding:14px" id="mon-termgap">
+      <div><b style="font-size:1.4em">{{ m.termgap|length }}</b> <span>Term shorter than 10 years</span></div>
+      <div class="muted small">matures before the 10-year hold ends</div>
+      {% for r, g in m.termgap[:3] %}<div class="small"><a class="mono" href="/fdrs/{{ r.f.id }}">{{ r.f.fd_number }}</a> <span class="muted">{{ g }} days early</span></div>{% endfor %}
+    </div>
+    <div class="panel" style="padding:14px"><div><b style="font-size:1.4em">→</b> <a href="/notifications">Alerts</a></div><div class="muted small">reminders T-90/60/30/7 and the escalation ladder</div></div>
+    <div class="panel" style="padding:14px"><div><b style="font-size:1.4em">→</b> <a href="/institutions">Institutions</a></div><div class="muted small">deposit adequacy per institution</div></div>
+  </div>
 </section>
 <form class="toolbar" method="get" role="search">
   <div class="field" style="min-width:260px;flex:1">

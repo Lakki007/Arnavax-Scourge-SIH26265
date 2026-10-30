@@ -10,6 +10,7 @@
       <legend>Sign in as</legend>
       <label><input type="radio" name="role" value="officer" checked><span><b>AICTE officer RB-01, Regulation Bureau (scrutiny)</b><span class="d">Registers FDRs, requests bank proofs, accepts or escalates, proposes releases.</span></span></label>
       <label><input type="radio" name="role" value="officer:RB-02"><span><b>AICTE officer RB-02, Regulation Bureau (approver)</b><span class="d">A second officer. Approves or rejects releases proposed by someone else (maker-checker).</span></span></label>
+      <label><input type="radio" name="role" value="officer:RB-03"><span><b>AICTE officer RB-03, competent authority</b><span class="d">Second signer for releases of ₹1 crore or more.</span></span></label>
       {% for i in institutions %}
       <label><input type="radio" name="role" value="institution:{{ i.id }}"><span><b>{{ i.name }}, {{ i.city }}</b><span class="d">Institution {{ i.id }} (sample). Answers AICTE's proof requests from its own bank session.</span></span></label>
       {% endfor %}

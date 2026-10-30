@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Alerts{% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <h1>Alerts<span class="serif">Reminders and escalations, generated daily.</span></h1>
+  <p class="lede">Maturity reminders at T-90, T-60, T-30 and T-7 days; matured deposits that are neither renewed nor released escalate to the scrutiny officer at once, the regional head after 7 days and the competent authority after 21; re-check and deposit-shortfall notices every 30 days. Each alert is also queued as e-mail ({{ outbox }} in the outbox; demo: not sent).</p>
+</div>
+{% if s.role == 'officer' %}
+<form method="post" action="/notifications/run" class="actions" style="align-items:flex-end">
+  <input type="hidden" name="csrf" value="{{ s.csrf }}">
+  <div class="field" style="margin:0"><label for="as_of">Run the daily check as of</label><input id="as_of" type="date" name="as_of"></div>
+  <button class="btn btn-quiet">Run now</button>
+</form>
+{% endif %}
+</div>
+{% if request.query_params.get('ran') is not none %}<div class="note note-good" role="status" style="margin-bottom:16px"><b>Daily check run.</b> {{ request.query_params.get('ran') }} new alerts.</div>{% endif %}
+{% if s.role == 'officer' %}
+<form class="toolbar" method="get"><div class="field"><label for="audience">Audience</label>
+<select id="audience" name="audience"><option value="">All AICTE audiences</option>{% for k, lab in LADDER %}<option value="{{ k }}" {% if audience == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+<button class="btn btn-quiet">Apply</button></form>
+{% endif %}
+{% if rows %}
+<div class="table-wrap"><table><thead><tr><th>When</th><th>Alert</th><th>Deposit</th><th>To</th><th>Message</th></tr></thead><tbody>
+{% for n in rows %}<tr class="alert-{{ n.kind }}"><td class="small nowrap">{{ n.as_of }}</td><td><b>{{ n.title }}</b></td><td>{% if n.fdr_id %}<a class="mono small" href="/fdrs/{{ n.fdr_id }}">{{ n.fdr_id }}</a>{% else %}<span class="small">{{ n.institution_id }}</span>{% endif %}</td><td class="small">{{ n.audience.replace('_',' ') }}</td><td class="small">{{ n.body }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty">No alerts yet.</div>{% endif %}
+{% endblock %}

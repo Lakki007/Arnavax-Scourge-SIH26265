@@ -18,6 +18,11 @@ FDRS = [
     ("FDR-004", "INST-42", "FD-0000444444", "500000.00", "2022-04-01", "2032-04-01"),
     ("FDR-003", "INST-77", "FD-0000555555", "1500000.00", "2020-03-31", "2030-03-31"),
 ]
+# programmes offered (APH Table 1.4 keys) and land status, for deposit adequacy
+PROFILES = {
+    "INST-42": {"programmes": [["engineering", "ug"], ["management", "pg"]], "leased": 0, "exempt": None},  # requires 35 + 15 = 50 lakh
+    "INST-77": {"programmes": [["computer_applications", "pg"]], "leased": 0, "exempt": None},          # requires 15 lakh
+}
 BANK_HOST = "netbanking.mockbank.test"
 CUSTOMERS = {
     "INST-42": {"name": "SYNTHETIC INSTITUTE OF TECHNOLOGY TRUST", "pan": "AAATS0000X", "customer_id": "CIF-SYN-0042"},
@@ -71,6 +76,9 @@ def seed():
     now = time.time()
     for i in INSTITUTIONS:
         db.x("INSERT INTO institutions VALUES(?,?,?)", i)
+    for iid, pr in PROFILES.items():
+        db.x("INSERT INTO institution_profile(institution_id,programmes_json,leased,exempt) VALUES(?,?,?,?)",
+             (iid, json.dumps(pr["programmes"]), pr["leased"], pr["exempt"]))
     for fid, iid, fd, p, issue, mat in FDRS:
         db.x("INSERT INTO fdrs(id,institution_id,fd_number,bank_host,principal,issue_date,maturity,created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?)",
              (fid, iid, fd, BANK_HOST, p, issue, mat, now, "seed"))

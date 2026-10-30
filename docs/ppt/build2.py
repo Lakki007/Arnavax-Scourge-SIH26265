@@ -230,9 +230,9 @@ tx(s2, hx + 2.5, yb, hw - 2.8, 0.34, [[("Every value traces to the bank's own by
 pointer(s2, L, 5.47, CW, "The complete FDR lifecycle in one portal (all five stages run in the prototype)", color=INK, size=11.5)
 life = [("1  FILE", VIO, "Institution files online; renewals linked"),
         ("2  PROVE", SKY, "Bank-session proof on AICTE's challenge"),
-        ("3  MONITOR", AMBER, "Maturity alerts; re-check every 30 days"),
+        ("3  MONITOR", AMBER, "T-90/60/30/7 alerts, escalation; Table 1.4 adequacy"),
         ("4  DECIDE", CORAL, "Verdict + evidence; hash-chained audit"),
-        ("5  PLEDGE RELEASE", MINT, "Two officers; signed letter to bank; holds")]
+        ("5  PLEDGE RELEASE", MINT, "Dept clearances, 2 signers, holds; QR-signed letter")]
 lw5 = (CW - 4 * 0.22) / 5
 for i, (h_, col, t_) in enumerate(life):
     x = L + i * (lw5 + 0.22)
@@ -317,7 +317,7 @@ title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
          ("FaGlobe", SKY, "13 / 16", "real TLS sessions, 6 Indian banks", "public pages, not FD pages"),
-         ("FaVial", MINT, "111 / 111", "automated tests pass", "incl. attack, forgery + two-officer tests"),
+         ("FaVial", MINT, "115 / 115", "automated tests pass", "incl. attack, forgery + release tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
@@ -441,7 +441,7 @@ q = rect(s6, L + 0.2, 5.55, 1.08, 1.08, fill=WHITE, r=0.08)
 qp6 = s6.shapes.add_picture(IMG + "qr_dark.png", Inches(L + 0.25), Inches(5.6), Inches(0.98), Inches(0.98)); qp6.click_action.hyperlink.address = DEMO_HREF
 tx(s6, L + 1.45, 5.5, 4.7, 1.2, [[("PROJECT RESOURCES", {"f": H, "b": True, "s": 11, "c": MINT, "after": 3})],
    [("Demo video (90 s): ", {"b": True, "s": 9.5, "c": WHITE}), (DEMO_URL, {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
-   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 111 / 111 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
+   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 115 / 115 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
    [("Code + evidence: ", {"b": True, "s": 9.5, "c": WHITE}), ("github.com/Lakki007/Arnavax-Scourge-SIH26265", {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # comparison table (hero)

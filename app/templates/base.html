@@ -17,9 +17,9 @@
     <nav class="nav" aria-label="Main">
       {% set links = [] %}
       {% if s and s.role == 'officer' %}
-        {% set links = [('/register','Register'),('/baseline','Baseline'),('/mockbank','Mock bank'),('/audit','Audit log'),('/system','System'),('/how','How it works')] %}
+        {% set links = [('/register','Register'),('/institutions','Institutions'),('/notifications','Alerts'),('/baseline','Baseline'),('/mockbank','Mock bank'),('/audit','Audit log'),('/system','System'),('/how','How it works')] %}
       {% elif s %}
-        {% set links = [('/portal','My deposits'),('/mockbank','Mock bank'),('/system','System'),('/how','How it works')] %}
+        {% set links = [('/portal','My deposits'),('/notifications','Alerts'),('/mockbank','Mock bank'),('/system','System'),('/how','How it works')] %}
       {% else %}
         {% set links = [] %}
       {% endif %}

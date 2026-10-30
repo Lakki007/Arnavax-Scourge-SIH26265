@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Institutions{% endblock %}
+{% block main %}
+<div class="page-head"><div>
+  <h1>Institutions<span class="serif">Is each security deposit large enough?</span></h1>
+  <p class="lede">Required amounts follow AICTE's Approval Process Handbook 2024-27, Table 1.4 (in lakh per programme level), doubled for a private leased building or land; Government and Government-aided institutions are exempt. "Filed" counts deposits held; "bank-confirmed" counts those with a current accepted bank-session confirmation.</p>
+</div></div>
+{% for r in rows %}{% set a = r.a %}
+<section class="panel" id="{{ r.i.id }}" style="margin-bottom:20px;padding:20px">
+  <div class="sec-head"><h2 style="margin:0">{{ r.i.name }}, {{ r.i.city }} <span class="muted small">{{ r.i.id }}</span></h2>
+    {% if a.shortfall_filed > 0 %}<span class="st st-discrepancy">Shortfall {{ inr(a.shortfall_filed) }}</span>{% else %}<span class="st st-confirmed">Adequate as filed</span>{% endif %}</div>
+  <div class="grid-4" style="margin-top:14px">
+    <div><div class="muted small">Required (Table 1.4)</div><b class="req-amt">{{ inr(a.required) }}</b></div>
+    <div><div class="muted small">Filed</div><b>{{ inr(a.filed) }}</b></div>
+    <div><div class="muted small">Bank-confirmed</div><b>{{ inr(a.confirmed) }}</b>{% if a.shortfall_confirmed > 0 %}<div class="muted small">{{ inr(a.shortfall_confirmed) }} not yet confirmed by a bank</div>{% endif %}</div>
+    <div><div class="muted small">Basis</div><span class="small">{% for it in a.lines %}{{ it.label }}: {{ it.lakh }} L{% if not loop.last %}; {% endif %}{% else %}no programmes recorded{% endfor %}{% if a.leased %}; ×{{ RULES.leased_multiplier }} leased{% endif %}</span></div>
+  </div>
+  {% if r.gaps %}<p class="note note-warn small" style="margin-top:12px"><b>10-year term gaps:</b> {% for f, g in r.gaps %}<a class="mono" href="/fdrs/{{ f.id }}">{{ f.fd_number }}</a> matures {{ g }} days early{% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  <details class="fold" style="margin-top:12px"><summary>Programmes and land status</summary>
+  <form method="post" action="/institutions/{{ r.i.id }}/profile" style="margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="table-wrap"><table><thead><tr><th>Programme</th>{% for lk, ll in RULES.levels.items() %}<th>{{ ll }}</th>{% endfor %}</tr></thead><tbody>
+    {% for pk, pv in RULES.programmes.items() %}<tr><td class="small">{{ pv.label }}</td>{% for lk in RULES.levels %}<td>{% if pv[lk] is not none %}<label class="small"><input type="checkbox" name="prog" value="{{ pk }}:{{ lk }}" {% if [pk, lk] in a.profile.programmes %}checked{% endif %}> {{ pv[lk] }} L</label>{% else %}<span class="muted">–</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}
+    </tbody></table></div>
+    <div class="actions" style="margin-top:10px">
+      <label class="small"><input type="checkbox" name="leased" value="1" {% if a.leased %}checked{% endif %}> Private leased building / land (×2)</label>
+      <label class="small">Exemption <select name="exempt"><option value="">None</option>{% for ek, ev in RULES.exemptions.items() %}<option value="{{ ek }}" {% if a.exempt == ek %}selected{% endif %}>{{ ev }}</option>{% endfor %}</select></label>
+      <button class="btn btn-quiet btn-sm">Save</button>
+    </div>
+  </form></details>
+</section>
+{% endfor %}
+<p class="muted small">Source: AICTE APH 2024-25 to 2026-27, Table 1.4 and its notes. Summing programme levels for a multi-programme institution is our reading and is marked for confirmation.</p>
+{% endblock %}

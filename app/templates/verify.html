@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Verify a release letter{% endblock %}
+{% block main %}
+<article class="panel" style="max-width:720px;margin:0 auto;padding:32px">
+  <h1 style="font-size:1.5em">Verify an AICTE release letter<span class="serif">Checks AICTE's digital signature.</span></h1>
+  {% if result == 'valid' or result == 'valid_unknown' %}
+    <p class="note note-good" id="verify-result"><b>Valid AICTE signature.</b> This pledge-release instruction was signed by AICTE and has not been changed.{% if result == 'valid_unknown' %} (This portal has no matching record, e.g. after a demo reset.){% endif %}</p>
+    <dl class="kv">
+      <dt>Letter</dt><dd>{{ payload.letter_no }}</dd><dt>Deposit</dt><dd class="mono">{{ payload.fd_number }} ({{ payload.fdr_id }})</dd>
+      <dt>Bank</dt><dd class="mono">{{ payload.bank_host }}</dd><dt>Institution</dt><dd>{{ payload.institution_id }}</dd>
+      <dt>Principal</dt><dd>{{ inr(payload.principal) }}</dd><dt>Proposed by</dt><dd>{{ payload.proposed_by }}</dd>
+      <dt>Signed by</dt><dd>{{ (payload.signed_by or [payload.approved_by])|join(', ') }}</dd>
+      {% if payload.clearances %}<dt>Cleared by</dt><dd>{{ payload.clearances|join(', ') }}</dd>{% endif %}
+    </dl>
+  {% elif result == 'invalid' %}
+    <p class="note note-bad" id="verify-result"><b>Invalid.</b> The signature does not match: this letter was altered or not issued by AICTE. Do not act on it.</p>
+  {% else %}
+    <p class="muted">Scan the QR code on a Scourge release letter to check it here.</p>
+  {% endif %}
+  <p class="small muted" style="margin-top:20px">Algorithm Ed25519. AICTE's public key: <a href="/api/aicte-release-key">/api/aicte-release-key</a>. SYNTHETIC DEMO.</p>
+</article>
+{% endblock %}

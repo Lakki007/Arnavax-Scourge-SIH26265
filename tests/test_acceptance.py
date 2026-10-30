@@ -518,6 +518,11 @@ def _confirmed(off, fdr="FDR-001"):
     return eid
 
 
+def _clear_all(sess, fdr="FDR-001"):
+    for d in ("PGRC", "VIG", "FIN"):
+        assert sess.post(f"/fdrs/{fdr}/release/clear", dept=d, decision="clear").status_code == 303
+
+
 def test_release_needs_two_different_officers(off):
     eid = _confirmed(off)
     assert off.post("/fdrs/FDR-001/release/approve").status_code == 409                # nothing proposed yet
@@ -529,6 +534,8 @@ def test_release_needs_two_different_officers(off):
     inst = S("institution:INST-42")
     assert inst.post("/fdrs/FDR-001/release/approve").status_code == 403               # institutions cannot approve
     rb2 = S("officer:RB-02")
+    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 409                # departments have not cleared yet
+    _clear_all(off)
     assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
     assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is not None
     letter = rb2.get("/fdrs/FDR-001/release-letter").text
@@ -633,6 +640,7 @@ def test_regulatory_hold_freezes_release(off):
     assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0150 term completed").status_code == 409
     assert off.post("/fdrs/FDR-001/hold/lift", note="Grievance resolved, RO letter 12/2026").status_code == 303
     assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0150 term completed").status_code == 303
+    _clear_all(off)
     off.post("/fdrs/FDR-001/hold", reason="New court case filed against the trust")
     assert S("officer:RB-02").post("/fdrs/FDR-001/release/approve").status_code == 409   # hold also blocks approval
 
@@ -642,6 +650,7 @@ def test_release_letter_is_signed_and_verifiable_offline(off):
     from cryptography.hazmat.primitives import serialization
     eid = _confirmed(off)
     off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0160 term completed")
+    _clear_all(off)
     rb2 = S("officer:RB-02")
     assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
     body = rb2.get("/fdrs/FDR-001/release-letter.json").json()
@@ -652,3 +661,89 @@ def test_release_letter_is_signed_and_verifiable_offline(off):
     from cryptography.exceptions import InvalidSignature
     with _p.raises(InvalidSignature):
         pub.verify(b64.b64decode(body["signature_b64"]), body["signed_bytes"].replace("RB-02", "RB-01").encode())
+
+
+
+def test_deposit_adequacy_table_1_4(off):
+    page = off.get("/institutions").text
+    # INST-42: Engineering UG 35 L + Management PG 15 L = 50 L required; filed 10 + 25 + 5 = 40 L
+    assert "₹50,00,000" in page and "Shortfall ₹10,00,000" in page
+    assert "Adequate as filed" in page                                     # INST-77: Computer Applications PG 15 L, filed 15 L
+    reg = off.get("/register").text
+    assert "Deposit shortfall" in reg and "INST-42" in reg[reg.index("mon-shortfall"):reg.index("mon-termgap")]
+    # leased land doubles the requirement
+    assert off.c.post("/institutions/INST-77/profile", data={"csrf": off.csrf, "prog": "computer_applications:pg", "leased": "1"}).status_code == 303
+    assert "Shortfall ₹15,00,000" in off.get("/institutions").text
+    # exemption brings it to zero
+    off.c.post("/institutions/INST-77/profile", data={"csrf": off.csrf, "prog": "computer_applications:pg", "exempt": "government"})
+    inst77 = off.get("/institutions").text.split('id="INST-77"')[1]
+    assert "Adequate as filed" in inst77[:2000]
+    # the institution sees its own position
+    assert "Shortfall ₹10,00,000" in S("institution:INST-42").get("/portal").text
+
+
+def test_term_gap_and_reminder_ladder(off):
+    import datetime as dt
+    off.post("/fdrs/new", institution_id="INST-42", fd_number="FD-0000555123", bank_host="netbanking.mockbank.test",
+             principal="300000", issue_date="2024-01-01", maturity="2029-01-01")          # 5-year FD: term gap
+    assert "Term shorter than 10 years" in off.get("/register").text and "FD-0000555123" in off.get("/register").text
+    # FDR-002 matures 2029-01-15: run the daily check as of 20 days before, then after maturity
+    r = off.post("/notifications/run", as_of="2028-12-26")
+    assert r.status_code == 303
+    page = off.get("/notifications").text
+    assert "Maturity reminder T-30" in page
+    n1 = db().execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
+    off.post("/notifications/run", as_of="2028-12-26")                                 # idempotent
+    assert db().execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == n1
+    off.post("/notifications/run", as_of="2029-02-10")                                 # 26 days overdue
+    esc = {r[0] for r in db().execute("SELECT audience FROM notifications WHERE kind='overdue_escalation' AND fdr_id='FDR-002'")}
+    assert esc == {"officer", "regional_head", "authority"}
+    assert db().execute("SELECT COUNT(*) FROM notifications WHERE channel='email' AND status LIKE 'queued%'").fetchone()[0] > 0
+    inst = S("institution:INST-42").get("/notifications").text
+    assert "Maturity reminder" in inst and "Escalated to" not in inst              # escalations are internal to AICTE
+
+
+def test_clearance_objection_blocks_and_second_signer_above_one_crore(off):
+    # a deposit of 1.2 crore needs two signatures besides the proposer
+    off.post("/fdrs/new", institution_id="INST-77", fd_number="FD-0000990001", bank_host="netbanking.mockbank.test",
+             principal="12000000", issue_date="2024-01-01", maturity="2034-01-01")
+    fid = db().execute("SELECT id FROM fdrs WHERE fd_number='FD-0000990001'").fetchone()[0]
+    FD[fid] = "FD-0000990001"
+    assert off.post("/mockbank/open", fd_number="FD-0000990001").status_code == 303
+    j, cid = prove(off, fid, inst="INST-77")
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    assert off.post(f"/fdrs/{fid}/decide", action="accept", evidence_id=str(eid)).status_code == 303
+    assert off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0200 term completed").status_code == 303
+    assert off.post(f"/fdrs/{fid}/release/clear", dept="VIG", decision="object", note="short").status_code == 422
+    assert off.post(f"/fdrs/{fid}/release/clear", dept="VIG", decision="object", note="Vigilance case pending against trust").status_code == 303
+    off.post(f"/fdrs/{fid}/release/clear", dept="PGRC", decision="clear"); off.post(f"/fdrs/{fid}/release/clear", dept="FIN", decision="clear")
+    rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                # objection blocks
+    rb2.post(f"/fdrs/{fid}/release/reject", note="Vigilance objection; resubmit later")
+    # second proposal, all clear
+    off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0201 term completed")
+    _clear_all(off, fid)
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # first signature only
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                # same officer cannot sign twice
+    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is not None
+    body = rb3.get(f"/fdrs/{fid}/release-letter.json").json()
+    assert body["payload"]["signed_by"] == ["RB-02", "RB-03"] and body["payload"]["clearances"] == ["FIN", "PGRC", "VIG"]
+
+
+def test_release_letter_qr_and_public_verify(off):
+    import re as _re, base64 as b64
+    eid = _confirmed(off)
+    off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0300 term completed")
+    _clear_all(off)
+    S("officer:RB-02").post("/fdrs/FDR-001/release/approve")
+    letter = off.get("/fdrs/FDR-001/release-letter").text
+    assert 'id="letter-qr"' in letter
+    url = _re.search(r'href="(http[^"]*/verify\?d=[^"]+)"', letter).group(1).replace("&amp;", "&")
+    pub = httpx.get(url)                                                              # public: no sign-in
+    assert pub.status_code == 200 and "Valid AICTE signature" in pub.text
+    d = _re.search(r"d=([^&]+)", url).group(1)
+    raw = b64.urlsafe_b64decode(d + "=" * (-len(d) % 4)).replace(b"RB-02", b"RB-09")
+    forged = url.replace(d, b64.urlsafe_b64encode(raw).decode().rstrip("="))
+    assert "Invalid." in httpx.get(forged).text

@@ -85,6 +85,9 @@ def test_full_journey(page):
     page.click("dialog[open] button:has-text('Propose release')")
     expect(page.locator(".page-head .st")).to_have_text("Release proposed")
     expect(page.locator("button:has-text('Approve release')")).to_have_count(0)   # maker cannot approve
+    for dept in ("PGRC", "VIG", "FIN"):
+        page.select_option("#clr-dept", dept)
+        page.click("#release button:has-text('Clear')")
     page.click("button:has-text('Switch to officer RB-02 to approve')")
     page.click("button:has-text('Approve release')")
     expect(page.locator(".page-head .st")).to_have_text("Released")
@@ -181,7 +184,9 @@ def test_reset_and_repeat(page):
     reset(page)
     expect(page.locator("tbody .st")).to_have_text(["Submitted by institution"] * 4)
     page.goto(B + "/audit")
-    expect(page.locator("tbody tr")).to_have_count(1)  # the reset wipes the log; its own entry is the first
+    # the reset wipes the log; its own entry is the first, followed only by the daily reminder check the register runs
+    expect(page.locator("tbody tr").last).to_contain_text("demo reset")
+    expect(page.locator("tbody tr")).to_have_count(2)
     assert not page.errors, page.errors
 
 

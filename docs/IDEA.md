@@ -173,9 +173,9 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | --- | --- |
 | **1 File** | Institutions file their own FDRs (`/fdrs/new`); officers can enter paper submissions; a renewed FDR is linked to the one it replaces, and the old one counts as renewed once the bank confirms the new one |
 | **2 Prove** | Single-use challenge → bank-session proof → verdict with byte-level evidence |
-| **3 Monitor** | Register "Needs attention" panel: bank contradicts paper, matured but not released, maturing within 90 days, re-check due (no confirmation in the last 30 days) |
+| **3 Monitor** | **Deposit adequacy** vs AICTE APH 2024-27 Table 1.4 (`config/deposit_rules.json`; ×2 for leased land; Government exempt) with filed vs bank-confirmed amounts and 10-year **term gaps** (`/institutions`); **daily reminder and escalation ladder** (T-90/60/30/7; matured & unrenewed → scrutiny officer, regional head after 7 days, competent authority after 21) written to an in-app + e-mail outbox (`/notifications`; demo time machine "run as of"); register "Needs attention" panel: bank contradicts paper, matured not released, maturing within 90 days, re-check due, deposit shortfall, term shorter than 10 years |
 | **4 Decide** | Officer accept / escalate; evidence exportable as JSON; audit log that is append-only **and hash-chained** (each entry carries the SHA-256 of the previous one; the Audit page re-verifies the whole chain and pinpoints the first altered entry; CSV export includes the hashes) |
-| **5 Release** | **Maker-checker:** one officer proposes, a different officer approves; approval is blocked unless an accepted bank confirmation is less than 30 days old; approval issues a release letter carrying its audit-entry hash and an **AICTE Ed25519 signature** (downloadable JSON the bank can verify offline with `/api/aicte-release-key`). **Regulatory holds** (pending grievance, court case, dues) freeze proposal and approval until lifted with a recorded reason |
+| **5 Pledge release** | **Maker-checker** (proposer ≠ approver) + **department clearances** (Public Grievance Redressal Cell, Vigilance, Finance and Grants; an objection blocks) + **second signer** (RB-03) for deposits ≥ ₹1 crore; approval only with a current (<30-day) accepted bank confirmation and no **regulatory hold**; issues a release letter with audit-entry hash, **AICTE Ed25519 signature** and a **QR code** opening the public `/verify` page (or offline check with `/api/aicte-release-key`) |
 
 ---
 
@@ -187,7 +187,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Data per proof | about 39 MB between prover and verifier | Measured |
 | Bad deposits caught | 119 / 119 (an upload-and-approve baseline approved all 119) | Measured, 180 fresh synthetic deposits |
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
-| Automated tests | 111 pass, 2 deployment-only skipped | Local run |
+| Automated tests | 115 pass, 2 deployment-only skipped | Local run |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages, **not** logged-in FD pages |
 | Software licence cost | ₹0 | Estimate |
 

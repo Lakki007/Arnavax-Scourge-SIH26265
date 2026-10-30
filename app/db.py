@@ -51,6 +51,21 @@ CREATE TABLE IF NOT EXISTS eadvices(
 CREATE TABLE IF NOT EXISTS holds(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), placed_by TEXT NOT NULL,
   placed_at REAL NOT NULL, reason TEXT NOT NULL, lifted_by TEXT, lifted_at REAL, lift_note TEXT);
+CREATE TABLE IF NOT EXISTS institution_profile(
+  institution_id TEXT PRIMARY KEY REFERENCES institutions(id), programmes_json TEXT NOT NULL DEFAULT '[]',
+  leased INTEGER NOT NULL DEFAULT 0, exempt TEXT);
+CREATE TABLE IF NOT EXISTS notifications(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL DEFAULT '', institution_id TEXT NOT NULL, kind TEXT NOT NULL,
+  step TEXT NOT NULL, audience TEXT NOT NULL, channel TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+  created_at REAL NOT NULL, as_of TEXT NOT NULL, status TEXT NOT NULL,
+  UNIQUE(fdr_id, institution_id, kind, step, audience, channel));
+CREATE TABLE IF NOT EXISTS release_clearances(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), dept TEXT NOT NULL,
+  decision TEXT NOT NULL CHECK(decision IN ('clear','object')), officer TEXT NOT NULL, at REAL NOT NULL, note TEXT,
+  UNIQUE(release_id, dept));
+CREATE TABLE IF NOT EXISTS release_approvals(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), officer TEXT NOT NULL,
+  at REAL NOT NULL, UNIQUE(release_id, officer));
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;
 """
