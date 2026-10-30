@@ -337,7 +337,7 @@ for i, (h_, t_) in enumerate(feas):
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
-risks = [("Bank page hides liens, or bytes are withheld", "Insufficient evidence, never Verified; release stays blocked"),
+risks = [("Bank page hides liens, or bytes are withheld", "Field-level fallback: bank-signed e-advice for that field only, never a guess"),
          ("Fake bank site or a replayed old proof", "Rejected: bank certificate + single-use, 15-min challenge"),
          ("Proof of a different FD, or an edited screen", "Rejected / no effect: FD bound to challenge; proof covers bank bytes"),
          ("Bank needs browser-bound session / TLS 1.3", "Browser-extension prover; bank marked unsupported until then")]
