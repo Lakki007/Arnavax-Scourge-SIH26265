@@ -99,7 +99,8 @@ def test_full_journey(page):
     page.click("button:has-text('Switch to completion recorder RB-04')")
     letter_no = page.locator("#completion b").first.inner_text()
     page.fill("#c-letter", letter_no); page.fill("#c-fd", "FD-0000123456"); page.fill("#c-amt", "1000000.00"); page.fill("#c-ref", "SBN/ACK/2026/0091")
-    page.set_input_files("#c-ack", {"name": "ack.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4\n% bank ack 0091\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"})
+    page.set_input_files("#c-ack", {"name": "ack.pdf", "mimeType": "application/pdf",
+                                    "buffer": f"%PDF-1.4\n% Pledge released per {letter_no} for FD-0000123456, amount 1000000.00\n%%EOF\n".encode()})
     page.click("button:has-text('Record completion')")
     expect(page.locator(".page-head .st")).to_have_text("Released")
     page.click("a:has-text('Open the release letter')")

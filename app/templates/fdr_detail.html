@@ -26,9 +26,17 @@
     <div class="field"><label for="c-amt">Amount on the acknowledgement (₹)</label><input id="c-amt" name="amount" inputmode="decimal" required></div>
     <div class="field"><label for="c-ref">Bank's reference number</label><input id="c-ref" name="bank_ref" required></div>
     <div class="field"><label for="c-ack">Bank acknowledgement (PDF/PNG/JPEG)</label><input id="c-ack" type="file" name="ack" accept=".pdf,.png,.jpg,.jpeg" required></div>
+    <label class="small"><input type="checkbox" name="attest" value="yes"> If this is a scan: I checked it against the bank's original and it names this letter, FD number and amount (recorded as a manual attestation).</label>
     <button class="btn btn-solid">Record completion</button>
   </form>
-  {% elif s.role == 'officer' %}
+  {% elif s.role == 'officer' and s.who in ['RB-02', 'RB-03'] %}
+  <form method="post" action="/fdrs/{{ f.id }}/release/revoke" class="actions" id="revoke-form" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <input name="reason" minlength="10" required placeholder="Reason to revoke (e.g. superseded by a corrected instruction)" style="min-width:320px">
+    <button class="btn btn-ghost btn-sm">Revoke instruction</button>
+  </form>
+  {% endif %}
+  {% if s.role == 'officer' and s.who not in ['RB-04'] %}
   <form method="post" action="/signin"><input type="hidden" name="role" value="officer:RB-04"><input type="hidden" name="next" value="/fdrs/{{ f.id }}#completion"><button class="btn btn-quiet">Switch to completion recorder RB-04</button></form>
   {% endif %}
 </section>{% endif %}

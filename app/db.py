@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS events(
 CREATE TABLE IF NOT EXISTS release_requests(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER NOT NULL,
   proposed_by TEXT NOT NULL, proposed_at REAL NOT NULL, note TEXT NOT NULL,
-  state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn')),
+  state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn','revoked')),
   decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT, signed_json TEXT, signature TEXT);
 CREATE TABLE IF NOT EXISTS eadvices(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER,

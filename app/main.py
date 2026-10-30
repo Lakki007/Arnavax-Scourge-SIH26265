@@ -94,7 +94,10 @@ def fdr_bundle(fid, _depth=0):
         st = ("release_pending", "Release proposed", f"by {rel['proposed_by']}; needs a second officer")
     issued = db.q1("SELECT * FROM release_requests WHERE fdr_id=? AND state='approved' ORDER BY id DESC", (fid,)) if not f["released_at"] else None
     if issued and st[0] != "renewed":
-        st = ("instruction_issued", "Release instruction issued", f"{issued['letter_no']}: awaiting the bank's acknowledgement")
+        if base[0] == "discrepancy":
+            st = ("discrepancy", "Discrepancy after instruction", f"new bank evidence contradicts the issued release {issued['letter_no']}: review before completion")
+        else:
+            st = ("instruction_issued", "Release instruction issued", f"{issued['letter_no']}: awaiting the bank's acknowledgement")
     hold = db.q1("SELECT * FROM holds WHERE fdr_id=? AND lifted_at IS NULL ORDER BY id DESC", (fid,))
     if hold and base[0] != "released" and st[0] != "renewed":
         st = ("on_hold", "On hold", hold["reason"][:80])
@@ -561,6 +564,8 @@ def action_gates(b):
         g["release"] = (False, f"On hold: {b['hold']['reason']}. Lift the hold first.")
     elif rel:
         g["release"] = (False, f"A release is already proposed by {rel['proposed_by']} and awaits a second officer.")
+    elif b.get("issued"):
+        g["release"] = (False, f"Instruction {b['issued']['letter_no']} is already issued and awaits the bank's acknowledgement. Revoke it first to issue a replacement.")
     else:
         g["release"] = (True, "")
     # maker-checker: a pending release can be approved only by a different officer, and only while the confirmation is fresh
@@ -625,6 +630,8 @@ def withdraw(request: Request, fid: str, csrf: str = Form("")):
 @app.post("/fdrs/{fid}/decide")
 def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(...), evidence_id: int = Form(...), note: str = Form("")):
     s = officer_post(request, csrf)
+    if auth.officer_id(s) not in auth.PROPOSERS:
+        raise HTTPException(403, "Only the scrutiny officer accepts, escalates or proposes a release.")
     b = get_fdr_or_404(s, fid)
     if action not in ("accept", "escalate", "release"):
         raise HTTPException(400, "Unknown action.")
@@ -674,8 +681,8 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
     entries. Any failure rolls all of it back."""
     s = officer_post(request, csrf)
     who = auth.officer_id(s)
-    if who not in auth.APPROVERS | auth.PROPOSERS:
-        raise HTTPException(403, "Only an approving officer can sign a release.")
+    if who not in auth.APPROVERS:
+        raise HTTPException(403, "Only an approving officer can sign a release (the scrutiny officer proposes; a different officer approves).")
     step_up(s, otp)
     get_fdr_or_404(s, fid)  # visibility check before taking the write lock
 
@@ -685,7 +692,7 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
         if not ok:
             raise HTTPException(409, why)
         rel, now = b["release_request"], time.time()
-        if version and version != release_version(b):
+        if not version or version != release_version(b):
             raise HTTPException(409, "The case changed after you opened it (new evidence, clearance, document, hold or signature). Reload and review again.")
         if who == rel["proposed_by"]:
             raise HTTPException(409, "Maker-checker: the officer who proposed a release cannot approve it. Sign in as another officer.")
@@ -817,6 +824,7 @@ async def release_complete(request: Request, fid: str):
     if len(bank_ref) < 4:
         raise HTTPException(422, "Enter the bank's own reference number from the acknowledgement.")
     sha = hashlib.sha256(data).hexdigest()
+    attested = form.get("attest") == "yes"
 
     def work(c):
         b = fdr_bundle(fid)
@@ -830,8 +838,22 @@ async def release_complete(request: Request, fid: str):
             raise HTTPException(403, "The officer who proposed or signed the release cannot record its completion.")
         if ref_letter != rel["letter_no"] or ref_fd != b["f"]["fd_number"] or ref_amount != policy.money(b["f"]["principal"]):
             raise HTTPException(422, "The acknowledgement must name this release letter, this FD number and this amount.")
+        # Does the document itself name this letter, FD and amount? Text PDFs are checked automatically; scans need
+        # the recorder's explicit, audited attestation, and the result is labelled accordingly.
+        text = data.decode("latin-1").upper()
+        amt = policy.money(b["f"]["principal"])
+        amount_forms = {f"{amt // 100}.{amt % 100:02d}", inr(b["f"]["principal"]).replace("₹", "").strip()}
+        named = rel["letter_no"].upper() in text and b["f"]["fd_number"].upper() in text and any(a_ in text for a_ in amount_forms)
+        if not named and not attested:
+            raise HTTPException(422, "The document does not visibly name this letter, FD number and amount. If it is a scan, tick the attestation that you checked it against the bank's original.")
+        how = "document_names_letter_fd_amount" if named else "recorder_attested_manual_review"
         if c.execute("SELECT 1 FROM documents WHERE sha256=?", (sha,)).fetchone():
             raise HTTPException(422, "This file is already on record (an old receipt or an earlier document cannot be reused as the acknowledgement).")
+        # new adverse bank evidence after the release was approved blocks completion (re-read inside this transaction)
+        adverse = c.execute("SELECT id, decision FROM evidence WHERE fdr_id=? AND id>? AND decision='discrepancy' ORDER BY id DESC",
+                            (fid, rel["evidence_id"])).fetchone()
+        if adverse:
+            raise HTTPException(409, f"New bank evidence (#{adverse['id']}) contradicts the deposit since the release was approved. Review it; do not complete.")
         cur_fp = release_fingerprint(b["f"], rel, {x["dept"]: x for x in c.execute("SELECT * FROM release_clearances WHERE release_id=?", (rel["id"],)).fetchall()}, b["hold"])
         if b["hold"] or cur_fp != signed["case_fingerprint"]:
             raise HTTPException(409, "The case changed after the instruction was signed (or a hold was placed). It needs fresh review and signatures, not completion.")
@@ -841,9 +863,33 @@ async def release_complete(request: Request, fid: str):
                         (fid, "bank_acknowledgement", re.sub(r"[^\w.\- ]", "_", ack.filename)[:120], mime, len(data), sha, stored, wk, nonce, f"officer:{who}", now)).lastrowid
         if c.execute("UPDATE fdrs SET released_at=? WHERE id=? AND released_at IS NULL", (now, fid)).rowcount != 1:
             raise HTTPException(409, "Already completed.")
-        db.event_in(c, f"officer:{who}", "release_completed", fid, release=rel["id"], letter=rel["letter_no"], bank_ref=bank_ref[:60], acknowledgement=did, sha256=sha)
+        db.event_in(c, f"officer:{who}", "release_completed", fid, release=rel["id"], letter=rel["letter_no"], bank_ref=bank_ref[:60], acknowledgement=did, sha256=sha, evidence_basis=how)
     db.tx(work)
     return RedirectResponse(f"/fdrs/{fid}?released=1", 303)
+
+
+@app.post("/fdrs/{fid}/release/revoke")
+def release_revoke(request: Request, fid: str, csrf: str = Form(""), reason: str = Form("")):
+    """Revoke an issued, not-yet-executed instruction (e.g. to supersede it). Approvers only, with a reason; the
+    signed letter stays on record marked revoked, and a fresh proposal can then start."""
+    s = officer_post(request, csrf)
+    who = auth.officer_id(s)
+    if who not in auth.APPROVERS:
+        raise HTTPException(403, "Only an approving officer can revoke a release instruction.")
+    reason = reason.strip()
+    if len(reason) < 10:
+        raise HTTPException(422, "Give a reason of at least 10 characters.")
+    get_fdr_or_404(s, fid)
+
+    def work(c):
+        b = fdr_bundle(fid)
+        rel = b["issued"]
+        if not rel:
+            raise HTTPException(409, "There is no issued, unexecuted instruction to revoke.")
+        c.execute("UPDATE release_requests SET state='revoked', decision_note=? WHERE id=? AND state='approved'", (f"REVOKED by {who}: {reason[:400]}", rel["id"]))
+        db.event_in(c, f"officer:{who}", "release_instruction_revoked", fid, release=rel["id"], letter=rel["letter_no"], reason=reason[:400])
+    db.tx(work)
+    return RedirectResponse(f"/fdrs/{fid}", 303)
 
 
 # ----------------------------------------------------------------- regulatory hold
@@ -1563,6 +1609,8 @@ def verify_release(request: Request, d: str = "", sig: str = ""):
             rel = db.q1("SELECT state FROM release_requests WHERE letter_no=?", (payload.get("letter_no"),))
             if not rel:
                 result = "valid_unknown"   # signature valid, but this portal has no record (e.g. after a demo reset)
+            elif rel["state"] == "revoked":
+                result = "revoked"         # genuine signature, but AICTE has revoked this instruction: do not execute
         except Exception:
             result = "invalid"
     return render(request, "verify.html", auth.read(request), result=result, payload=payload)

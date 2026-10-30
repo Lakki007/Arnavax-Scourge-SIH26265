@@ -4,6 +4,7 @@ These exercise the real prover, the separate verifier and the synthetic bank. Th
 import base64
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import time
@@ -68,6 +69,14 @@ def prove(off, fdr, behaviour="active", inst="INST-42", lien_text="", **mode):
             return j, cid
         time.sleep(0.25)
     raise AssertionError("job did not finish")
+
+
+def _approve(sess, url, **kw):
+    """Approve as a browser would: send the case version shown on the page (mandatory)."""
+    if "version" not in kw:
+        m = re.search(r'name="version" value="([^"]+)"', sess.get(url.rsplit("/release/", 1)[0]).text)
+        kw["version"] = m.group(1) if m else ""
+    return sess.post(url, **kw)
 
 
 def evidence(cid):
@@ -535,18 +544,18 @@ def _clear_all(sess=None, fdr="FDR-001"):
 
 def test_release_needs_two_different_officers(off):
     eid = _confirmed(off)
-    assert off.post("/fdrs/FDR-001/release/approve").status_code == 409                # nothing proposed yet
+    assert _approve(off, "/fdrs/FDR-001/release/approve").status_code == 403                # scrutiny officer cannot approve at all
     assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0142 term completed").status_code == 303
     assert "Release proposed" in off.get("/fdrs/FDR-001").text
     assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="second proposal attempt").status_code == 409
-    assert off.post("/fdrs/FDR-001/release/approve").status_code == 409                # maker cannot be checker
+    assert _approve(off, "/fdrs/FDR-001/release/approve").status_code == 403                # maker cannot be checker
     assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is None
     inst = S("institution:INST-42")
-    assert inst.post("/fdrs/FDR-001/release/approve").status_code == 403               # institutions cannot approve
+    assert _approve(inst, "/fdrs/FDR-001/release/approve").status_code == 403               # institutions cannot approve
     rb2 = S("officer:RB-02")
-    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 409                # departments have not cleared yet
+    assert _approve(rb2, "/fdrs/FDR-001/release/approve").status_code == 409                # departments have not cleared yet
     _clear_all(off)
-    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
+    assert _approve(rb2, "/fdrs/FDR-001/release/approve").status_code == 303
     assert db().execute("SELECT released_at FROM fdrs WHERE id='FDR-001'").fetchone()[0] is None           # issued, not yet executed
     assert db().execute("SELECT state FROM release_requests WHERE fdr_id='FDR-001'").fetchone()[0] == "approved"
     assert "Release instruction issued" in rb2.get("/fdrs/FDR-001").text
@@ -561,7 +570,7 @@ def test_release_approval_blocked_when_confirmation_goes_stale(off):
     off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0143 term completed")
     c = db(); c.execute("UPDATE evidence SET received_at=received_at-31*86400 WHERE id=?", (eid,)); c.commit()
     rb2 = S("officer:RB-02")
-    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 409
+    assert _approve(rb2, "/fdrs/FDR-001/release/approve").status_code == 409
     assert rb2.post("/fdrs/FDR-001/release/reject", note="short").status_code == 422
     assert rb2.post("/fdrs/FDR-001/release/reject", note="Confirmation expired; ask for a fresh proof").status_code == 303
     assert db().execute("SELECT state FROM release_requests WHERE fdr_id='FDR-001'").fetchone()[0] == "rejected"
@@ -654,7 +663,7 @@ def test_regulatory_hold_freezes_release(off):
     assert off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0150 term completed").status_code == 303
     _clear_all(off)
     off.post("/fdrs/FDR-001/hold", reason="New court case filed against the trust")
-    assert S("officer:RB-02").post("/fdrs/FDR-001/release/approve").status_code == 409   # hold also blocks approval
+    assert _approve(S("officer:RB-02"), "/fdrs/FDR-001/release/approve").status_code == 409   # hold also blocks approval
 
 
 def test_release_letter_is_signed_and_verifiable_offline(off):
@@ -664,7 +673,7 @@ def test_release_letter_is_signed_and_verifiable_offline(off):
     off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0160 term completed")
     _clear_all(off)
     rb2 = S("officer:RB-02")
-    assert rb2.post("/fdrs/FDR-001/release/approve").status_code == 303
+    assert _approve(rb2, "/fdrs/FDR-001/release/approve").status_code == 303
     body = rb2.get("/fdrs/FDR-001/release-letter.json").json()
     pub = serialization.load_pem_public_key(httpx.get(B + "/api/aicte-release-key").text.encode())
     pub.verify(b64.b64decode(body["signature_b64"]), body["signed_bytes"].encode())          # raises if invalid
@@ -731,15 +740,15 @@ def test_clearance_objection_blocks_and_second_signer_above_one_crore(off):
     assert _clear(vg, fid, "VIG", "object", note="Vigilance case pending against trust").status_code == 303
     _clear(S("officer:PG-01"), fid, "PGRC"); _clear(S("officer:FN-01"), fid, "FIN")
     rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                # objection blocks
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 409                # objection blocks
     rb2.post(f"/fdrs/{fid}/release/reject", note="Vigilance objection; resubmit later")
     # second proposal, all clear
     off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0201 term completed")
     _clear_all(off, fid)
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # first signature only
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 303                # first signature only
     assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                # same officer cannot sign twice
-    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 409                # same officer cannot sign twice
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve").status_code == 303
     assert db().execute("SELECT state FROM release_requests WHERE fdr_id=? ORDER BY id DESC", (fid,)).fetchone()[0] == "approved"
     body = rb3.get(f"/fdrs/{fid}/release-letter.json").json()
     assert body["payload"]["signed_by"] == ["RB-02", "RB-03"] and body["payload"]["clearances"] == ["FIN", "PGRC", "VIG"]
@@ -750,7 +759,7 @@ def test_release_letter_qr_and_public_verify(off):
     eid = _confirmed(off)
     off.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0300 term completed")
     _clear_all(off)
-    S("officer:RB-02").post("/fdrs/FDR-001/release/approve")
+    _approve(S("officer:RB-02"), "/fdrs/FDR-001/release/approve")
     letter = off.get("/fdrs/FDR-001/release-letter").text
     assert 'id="letter-qr"' in letter
     url = _re.search(r'href="(http[^"]*/verify\?d=[^"]+)"', letter).group(1).replace("&amp;", "&")
@@ -859,7 +868,8 @@ def test_two_factor_signin_lockout_and_step_up(off):
     csrf = json.loads(base64.urlsafe_b64decode(c.cookies["scourge_session"].rsplit(".", 1)[0]))["csrf"]
     assert c.post("/fdrs/FDR-001/release/approve", data={"csrf": csrf}).status_code == 403
     db().execute("UPDATE officer_mfa SET last_step=last_step-5 WHERE officer='RB-03'").connection.commit()
-    assert c.post("/fdrs/FDR-001/release/approve", data={"csrf": csrf, "otp": totp.code_at(secret, totp.now_step())}).status_code == 303
+    ver = re.search(r'name="version" value="([^"]+)"', c.get("/fdrs/FDR-001").text).group(1)
+    assert c.post("/fdrs/FDR-001/release/approve", data={"csrf": csrf, "version": ver, "otp": totp.code_at(secret, totp.now_step())}).status_code == 303
     # lockout after five wrong codes (the missing code above already counted as one)
     for _ in range(4):
         assert _signin_raw("officer:RB-03", "999999")[1].status_code == 403
@@ -928,16 +938,16 @@ def test_signature_withdrawn_when_case_changes_after_signing(off):
     off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0300 term completed")
     _clear_all(off, fid)
     rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # first signature
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 303                # first signature
     # a document is added to the case after RB-02 signed
     inst = S("institution:INST-77")
     pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
     assert inst.c.post(f"/fdrs/{fid}/documents", data={"csrf": inst.csrf, "kind": "fdr_receipt"},
                        files={"file": ("late.pdf", pdf, "application/pdf")}).status_code == 303
     assert "stale-signatures" in off.get(f"/fdrs/{fid}").text
-    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303                # counts as the first valid signature now
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve").status_code == 303                # counts as the first valid signature now
     assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303                # RB-02 signs again, on the current case
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 303                # RB-02 signs again, on the current case
     assert db().execute("SELECT state FROM release_requests WHERE fdr_id=? ORDER BY id DESC", (fid,)).fetchone()[0] == "approved"
     body = rb2.get(f"/fdrs/{fid}/release-letter.json").json()
     assert body["payload"]["signed_by"] == ["RB-03", "RB-02"] and len(body["payload"]["case_fingerprint"]) == 64
@@ -1032,7 +1042,7 @@ def test_p02_proposer_and_approvers_cannot_clear(off):
     for who in ("RB-01", "RB-02", "RB-03"):
         for d in DEPT_REVIEWER:
             assert _clear(S(f"officer:{who}"), "FDR-001", d).status_code == 403
-    assert S("officer:PG-01").post("/fdrs/FDR-001/release/approve").status_code == 403     # reviewers cannot sign
+    assert _approve(S("officer:PG-01"), "/fdrs/FDR-001/release/approve").status_code == 403     # reviewers cannot sign
 
 
 def test_p03_clearance_needs_reason_and_memo(off):
@@ -1072,8 +1082,8 @@ def test_p05_same_officer_cannot_give_both_signatures(off):
     off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0500 term completed")
     _clear_all(fdr=fid)
     rb2 = S("officer:RB-02")
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 303
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 409
     assert db().execute("SELECT count(*) FROM release_approvals").fetchone()[0] == 1
 
 
@@ -1116,7 +1126,7 @@ def test_g03_hold_placed_before_approval_commits_blocks_it(off):
     rb2 = S("officer:RB-02")
     v = _version(rb2, fid)
     assert off.post(f"/fdrs/{fid}/hold", reason="Court order pending in WP 123/2026").status_code == 303
-    assert rb2.post(f"/fdrs/{fid}/release/approve", version=v).status_code == 409
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve", version=v).status_code == 409
     assert _counts(fid)[:3] == (0, "pending", 0)
 
 
@@ -1124,11 +1134,11 @@ def test_g05_g06_stale_version_and_duplicate_requests(off):
     fid = _two_signer_case(off, "FD-0000990102")
     rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
     v = _version(rb2, fid)
-    assert rb2.post(f"/fdrs/{fid}/release/approve", version=v).status_code == 303          # signature 1 of 2
-    assert rb3.post(f"/fdrs/{fid}/release/approve", version=v).status_code == 409          # saw the case before that signature
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve", version=v).status_code == 303          # signature 1 of 2
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve", version=v).status_code == 409          # saw the case before that signature
     v2 = _version(rb3, fid)
-    assert rb3.post(f"/fdrs/{fid}/release/approve", version=v2).status_code == 303
-    assert rb3.post(f"/fdrs/{fid}/release/approve", version=v2).status_code == 409          # duplicate: already decided
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve", version=v2).status_code == 303
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve", version=v2).status_code == 409          # duplicate: already decided
     a, state, ev, act = _counts(fid)
     assert (a, state, ev, act) == (2, "approved", 2, 1)                                     # one transition, one letter
 
@@ -1137,29 +1147,35 @@ def test_g05_g06_stale_version_and_duplicate_requests(off):
 def test_g07_g08_failure_mid_approval_rolls_everything_back(off, point):
     fid = _two_signer_case(off, f"FD-00009902{['after_signature','after_state','before_audit','after_audit'].index(point)}0")
     rb2, rb3 = S("officer:RB-02"), S("officer:RB-03")
-    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 303
+    assert _approve(rb2, f"/fdrs/{fid}/release/approve").status_code == 303
     before = _counts(fid)
     head = off.get("/api/audit/verify").json()
     _arm(point)
-    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 500
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve").status_code == 500
     assert _counts(fid) == before                                                           # no signature, state, action or audit
     assert off.get("/api/audit/verify").json() == head
-    assert rb3.post(f"/fdrs/{fid}/release/approve").status_code == 303                     # and it works once the fault is gone
+    assert _approve(rb3, f"/fdrs/{fid}/release/approve").status_code == 303                     # and it works once the fault is gone
     assert _counts(fid)[1] == "approved"
 
 
 # ---------------------------------------------------------------- C-series: issued instruction vs completed release
 def _issued(off, fd="FD-0000990300"):
     fid = _two_signer_case(off, fd, principal="12000000")
-    S("officer:RB-02").post(f"/fdrs/{fid}/release/approve")
-    S("officer:RB-03").post(f"/fdrs/{fid}/release/approve")
+    _approve(S("officer:RB-02"), f"/fdrs/{fid}/release/approve")
+    _approve(S("officer:RB-03"), f"/fdrs/{fid}/release/approve")
     letter = db().execute("SELECT letter_no FROM release_requests WHERE fdr_id=? AND state='approved'", (fid,)).fetchone()[0]
     return fid, letter
 
 
-def _complete(sess, fid, letter, fd, amount="12000000.00", ack=b"%PDF-1.4\n% ack 1\n%%EOF\n", ref="SBN/ACK/2026/0091"):
+def _ack(letter, fd, amount="12000000.00", n=1):
+    return f"%PDF-1.4\n% Bank acknowledgement {n}: pledge released per {letter} for {fd}, amount {amount}\n%%EOF\n".encode()
+
+
+def _complete(sess, fid, letter, fd, amount="12000000.00", ack="auto", ref="SBN/ACK/2026/0091", **extra):
+    if ack == "auto":
+        ack = _ack(letter, fd, amount)
     files = {"ack": ("ack.pdf", ack, "application/pdf")} if ack else None
-    return sess.c.post(f"/fdrs/{fid}/release/complete", data={"csrf": sess.csrf, "letter_no": letter, "fd_number": fd, "amount": amount, "bank_ref": ref}, files=files)
+    return sess.c.post(f"/fdrs/{fid}/release/complete", data={"csrf": sess.csrf, "letter_no": letter, "fd_number": fd, "amount": amount, "bank_ref": ref, **extra}, files=files)
 
 
 def test_c01_issued_instruction_is_not_completion(off):
@@ -1189,7 +1205,7 @@ def test_c04_c06_valid_completion_once(off):
     rec = S("officer:RB-04")
     assert _complete(rec, fid, letter, FD[fid]).status_code == 303
     assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is not None
-    assert _complete(rec, fid, letter, FD[fid], ack=b"%PDF-1.4\n% ack 2\n%%EOF\n").status_code == 409   # retried: no duplicate
+    assert _complete(rec, fid, letter, FD[fid], ack=_ack(letter, FD[fid], n=2)).status_code == 409   # retried: no duplicate
     c = db()
     assert c.execute("SELECT count(*) FROM events WHERE fdr_id=? AND kind='release_completed'", (fid,)).fetchone()[0] == 1
     assert c.execute("SELECT kind, uploaded_by FROM documents WHERE fdr_id=? AND kind='bank_acknowledgement'", (fid,)).fetchall() == [("bank_acknowledgement", "officer:RB-04")]
@@ -1203,3 +1219,71 @@ def test_c05_changed_basis_needs_review_not_completion(off):
                        files={"file": ("late.pdf", b"%PDF-1.4\n% late\n%%EOF\n", "application/pdf")}).status_code == 303
     assert _complete(S("officer:RB-04"), fid, letter, FD[fid]).status_code == 409
     assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
+
+
+
+# ---------------------------------------------------------------- second review round: P0 + P1 safeguards
+def test_adverse_bank_evidence_after_issue_blocks_completion(off):
+    fid, letter = _issued(off, "FD-0000990401")
+    j, cid = prove(off, fid, "lien_loan", inst="INST-77")                                 # bank now shows a loan
+    assert j["decision"] == "discrepancy"
+    assert _complete(S("officer:RB-04"), fid, letter, FD[fid]).status_code == 409
+    assert db().execute("SELECT released_at FROM fdrs WHERE id=?", (fid,)).fetchone()[0] is None
+    assert "Discrepancy after instruction" in off.get(f"/fdrs/{fid}").text
+
+
+def test_approval_version_is_mandatory(off):
+    fid = _two_signer_case(off, "FD-0000990402")
+    rb2 = S("officer:RB-02")
+    assert rb2.post(f"/fdrs/{fid}/release/approve").status_code == 409                  # missing
+    assert rb2.post(f"/fdrs/{fid}/release/approve", version="").status_code == 409      # empty
+    assert rb2.post(f"/fdrs/{fid}/release/approve", version="0" * 64 + ":0").status_code == 409   # forged / stale
+    assert db().execute("SELECT count(*) FROM release_approvals").fetchone()[0] == 0
+
+
+def test_acknowledgement_must_name_case_or_be_attested(off):
+    fid, letter = _issued(off, "FD-0000990403")
+    rec = S("officer:RB-04")
+    scan = b"%PDF-1.4\n% scanned image, no text\n%%EOF\n"
+    assert _complete(rec, fid, letter, FD[fid], ack=scan).status_code == 422             # names nothing, not attested
+    wrong = _ack("AICTE/RB/REL/2026/9999", FD[fid])
+    assert _complete(rec, fid, letter, FD[fid], ack=wrong).status_code == 422            # names another letter
+    assert _complete(rec, fid, letter, FD[fid], ack=scan, attest="yes").status_code == 303
+    ev = db().execute("SELECT detail_json FROM events WHERE kind='release_completed' AND fdr_id=?", (fid,)).fetchone()[0]
+    assert json.loads(ev)["evidence_basis"] == "recorder_attested_manual_review"
+
+
+def test_one_outstanding_release_and_revoke_to_supersede(off):
+    fid, letter = _issued(off, "FD-0000990404")
+    eid = db().execute("SELECT evidence_id FROM release_requests WHERE fdr_id=?", (fid,)).fetchone()[0]
+    assert off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0700 duplicate proposal").status_code == 409
+    rb2 = S("officer:RB-02")
+    assert off.post(f"/fdrs/{fid}/release/revoke", reason="Superseded by corrected instruction").status_code == 403   # not an approver
+    assert rb2.post(f"/fdrs/{fid}/release/revoke", reason="short").status_code == 422
+    assert rb2.post(f"/fdrs/{fid}/release/revoke", reason="Superseded by corrected instruction").status_code == 303
+    assert db().execute("SELECT state FROM release_requests WHERE letter_no=?", (letter,)).fetchone()[0] == "revoked"
+    assert _complete(S("officer:RB-04"), fid, letter, FD[fid]).status_code == 409         # revoked: nothing to complete
+    assert off.post(f"/fdrs/{fid}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0701 replacement").status_code == 303
+
+
+def test_revoked_letter_fails_public_verification(off):
+    fid, letter = _issued(off, "FD-0000990405")
+    body = S("officer:RB-02").get(f"/fdrs/{fid}/release-letter.json").json()
+    import base64 as b64
+    d = b64.urlsafe_b64encode(body["signed_bytes"].encode()).decode().rstrip("=")
+    sig = b64.urlsafe_b64encode(b64.b64decode(body["signature_b64"])).decode().rstrip("=")
+    assert "Valid AICTE signature" in httpx.get(B + f"/verify?d={d}&sig={sig}").text
+    S("officer:RB-02").post(f"/fdrs/{fid}/release/revoke", reason="Superseded by corrected instruction")
+    assert "Revoked by AICTE" in httpx.get(B + f"/verify?d={d}&sig={sig}").text
+
+
+@pytest.mark.parametrize("who", ["PG-01", "VG-01", "FN-01", "RB-02", "RB-03", "RB-04"])
+def test_only_scrutiny_officer_accepts_and_proposes(off, who):
+    j, cid = prove(off, "FDR-001")
+    eid = db().execute("SELECT id FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    o = S(f"officer:{who}")
+    assert o.post("/fdrs/FDR-001/decide", action="accept", evidence_id=str(eid)).status_code == 403
+    assert off.post("/fdrs/FDR-001/decide", action="accept", evidence_id=str(eid)).status_code == 303
+    assert o.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0800 not my role").status_code == 403
+    if who not in ("RB-02", "RB-03"):
+        assert _approve(o, "/fdrs/FDR-001/release/approve").status_code == 403
