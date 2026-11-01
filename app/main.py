@@ -1309,7 +1309,8 @@ def mockbank_open(request: Request, csrf: str = Form(""), fd_number: str = Form(
 
 # ----------------------------------------------------------------- two-factor (authenticator app) for officers
 LOCKOUT_FAILURES, LOCKOUT_SECONDS = 5, 15 * 60
-MFA_REQUIRED = os.environ.get("SCOURGE_MFA_REQUIRED") == "1"
+# Mandatory for every officer in production (SCOURGE_AUTH=password); opt-in in demo mode.
+MFA_REQUIRED = os.environ.get("SCOURGE_MFA_REQUIRED", "1" if accounts.AUTH_MODE == "password" else "0") == "1"
 
 
 def step_up(s, otp):
@@ -1407,7 +1408,7 @@ def download_document(request: Request, did: int, reason: str = ""):
 
 
 # ----------------------------------------------------------------- evidence tier 3: bank branch confirmation
-BANK_DIR = json.loads((ROOT / "config" / "bank_directory.json").read_text())
+BANK_DIR = json.loads((ROOT / "config" / "bank_directory.json").read_text(encoding="utf-8"))
 BRANCH_TTL = 7 * 86400
 
 

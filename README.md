@@ -2,7 +2,8 @@
 
 **Ask the bank, not the paper.** Smart India Hackathon 2026 · PS SIH26265 · Team **Arnavax#** (ID 199322)
 
-- Demo video (90 s): https://youtu.be/8HoplhFOGCg
+- Demo video: https://youtu.be/8HoplhFOGCg
+- **For reviewers:** [`docs/SECURITY.md`](docs/SECURITY.md) (each control → code → test) · [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) (bank coverage, fallback, legal basis, cost, deployment and recovery)
 - **Full idea, solution and workflow (start here):** [`docs/IDEA.md`](docs/IDEA.md)
 - Code: https://github.com/Lakki007/Arnavax-Scourge-SIH26265
 - Idea deck: `docs/ppt/Scourge_SIH26265_Idea.pdf`
@@ -10,13 +11,12 @@
 
 An institution proves, from its own net-banking session, what the bank's server says about an FDR. AICTE's separate verifier checks the MPC-TLS proof (TLSNotary) and sees only that deposit's record. The app compares the proven fields with the register and lets an officer accept, escalate or release.
 
-**Status:** release candidate `v1.0.0-rc1`, **demo mode** (synthetic bank, real proofs). Judge kit: `docs/JUDGE_DEMO.md`. Operations: `docs/RUNBOOK.md`. Verification: `docs/PHASE4_VERIFICATION.md`.
+**Status (1 Nov 2026):** prototype, runs in demo mode by default (synthetic bank, real proofs); `SCOURGE_AUTH=password` switches to production sign-in. Judge kit: `docs/JUDGE_DEMO.md`. Operations: `docs/RUNBOOK.md`.
 
-- **Real:** the cryptographic proof, challenge binding, policy and decisions.
-- **Synthetic:** the bank, which is a local mock with a test certificate authority.
-- **Not shown yet:** a proof of a logged-in FD page at a real bank. That is the open go/no-go test (`EXPERIMENT_V2.md` from the V2 package).
-
-This is not production-ready. See "Limitations".
+- **Real:** the cryptographic proof, challenge binding, lien and register policy, officer decisions, the release workflow (department clearances, two-officer signing, bank acknowledgement, revoke), named accounts with officer 2FA, the encrypted vault, the audit hash chain, backup and verified restore.
+- **Real bank, transport layer:** on 30 Oct 2026 a live split-key (MPC-TLS) session ran against a real bank's production net-banking API (first bank tested: SBI). Certificate verified against public roots, HTTP 200, proof verified in about 1 s. Details and raw output: [`tools/realbank/RESULTS.md`](tools/realbank/RESULTS.md).
+- **Not yet proven at a real bank:** the account or FD data itself. The replayed request was answered without account data (the bank most likely rejects replayed requests). The fix is a browser-extension prover that proves the browser's own request; until then, deposits at banks whose page cannot be proven use the fallback in [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md), and Scourge never marks them Verified.
+- **Synthetic:** the bank in the demo (local mock with a test certificate authority), labelled on every screen.
 
 ## Architecture (approved MVP, four components)
 
@@ -40,6 +40,8 @@ pip install -r requirements.txt          # tests: pip install -r requirements-de
 ./scripts/build_rust.sh        # optional: rebuild bin/ from source (clones TLSNotary at a pinned commit)
 ./scripts/run.sh               # http://127.0.0.1:8080 (always loopback; publish with deploy/nginx.conf)
 ```
+
+Or with Docker: `docker compose up -d` (persistent volume, restart on failure, health check). Backup on demand: `docker compose run --rm backup`.
 
 On first run the app:
 
@@ -70,10 +72,16 @@ On first run the app:
 ## Tests
 
 ```bash
-./scripts/run.sh &                                  # tests drive the running app
-python3 -m pytest -q tests/                         # 100 tests (+2 that run only with the deployment access code): policy, acceptance over HTTP + real binaries, browser journeys
+pip install -r requirements.txt pytest httpx
+python3 -m pytest -q tests/test_policy.py tests/test_units.py tests/test_backup.py   # fast, no server needed
+
+pip install -r requirements-dev.txt && python3 -m playwright install chromium
+./scripts/run.sh &                                  # acceptance and browser tests drive the running app
+python3 -m pytest -q tests/                         # full suite: 259 pass, 2 skipped (deployment access-code gate)
 python3 scripts/shots.py var/shots                  # screenshots of every page, desktop and mobile; reports console errors and 5xx
 ```
+
+Without Playwright installed, the browser-journey file is skipped instead of failing collection. CI (`.github/workflows/ci.yml`) runs the full suite, including the real proof binaries and the browser journey.
 
 ## What is real, synthetic or incomplete
 
@@ -85,9 +93,12 @@ python3 scripts/shots.py var/shots                  # screenshots of every page,
 | Officer accept / escalate / release gate; append-only audit; exports | Real |
 | Bank | **Synthetic** mock server; test CA |
 | Prover location | **Demo**: on the server with a mock session (real use: the CLI command shown on the challenge page) |
-| Sign-in | **Demo** role chooser, no passwords |
-| Logged-in real-bank FD page | **Not shown** |
-| Timing with a remote verifier | **Not measured** |
+| Sign-in | Named accounts (scrypt, lockout), **2FA mandatory for officers** in `SCOURGE_AUTH=password`; demo mode adds a role chooser for judges |
+| Release | Department clearances with memos, two-officer atomic approval, signed letter with QR verification, bank acknowledgement, revoke |
+| Backup and recovery | Online backup, checksummed archive, verified restore (`scripts/backup.py`) |
+| Live real-bank MPC-TLS session | **Real** (first bank tested: SBI; transport, certificate and timing) |
+| Account / FD data proven at a real bank | **Not yet** (needs the browser-extension prover; fallback in FEASIBILITY.md) |
+| Timing with a remote verifier | Real bank run: about 1 s, ~357 MB prover-verifier traffic |
 
 ## Audit changes (29 Oct)
 
@@ -100,13 +111,13 @@ See `docs/AUDIT.md`. Behaviour that changed on purpose:
 
 ## Limitations
 
-- **Demo sign-in.** No SSO or MFA. Signing in has no CSRF protection.
+- **Sign-in.** Demo mode keeps a role chooser so judges can click through; production mode (`SCOURGE_AUTH=password`) refuses it and requires named accounts, with 2FA for every officer. No AICTE SSO integration yet.
 - **Storage and serving.** SQLite with a single writer. No TLS on the app itself; put it behind HTTPS in any deployment.
 - **Challenge token storage.** The token is kept in the database so the institution portal can show it; production should deliver it once.
 - **Freshness.** Proofs show the bank's response at the session time only. A field the bank page does not show is reported as unknown.
 - **Record-only disclosure.** It cannot prove where the record sat in the response; this is shown on the evidence.
 - **TLSNotary build.** It needs TLS 1.2 (P-256, AES-128-GCM) on the bank server. Most Indian net-banking hosts probed accepted this; TLS 1.3-only servers would fail.
-- **Limits.** At most 2 concurrent proofs; each proof uploads about 39 MB from prover to verifier (measured on localhost).
+- **Limits.** At most 2 concurrent proofs per verifier; each proof moves about 39 MB (synthetic bank, localhost) to ~357 MB (real bank, larger certificate chain and request) between prover and verifier. Sizing in FEASIBILITY.md.
 
 ## Licences
 

@@ -21,3 +21,17 @@ try:
 except accounts.Weak as e:
     sys.exit(str(e))
 print(f"Created {role} account {user}.")
+if role == "officer":
+    # Production (SCOURGE_AUTH=password) requires two-factor sign-in for every officer, so enrol it now.
+    import time
+    from app import db, totp
+    secret = totp.new_secret()
+    print("Add this to the officer's authenticator app:\n  " + totp.uri(secret, ident))
+    for _ in range(3):
+        st = totp.verify(secret, input("Current 6-digit code: ").strip(), 0)
+        if st is not None:
+            db.x("INSERT OR REPLACE INTO officer_mfa(officer,secret,enabled,created_at,last_step) VALUES(?,?,1,?,?)", (ident, secret, time.time(), st))
+            print(f"Two-factor sign-in enrolled for {ident}.")
+            break
+    else:
+        sys.exit("Code not accepted. The account exists but cannot sign in until two-factor is enrolled; run again.")

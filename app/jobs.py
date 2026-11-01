@@ -38,14 +38,14 @@ def _prover_config(target):
         return ROOT / "config" / "scourge.json"
     p = JOBTMP / "prover_config_unlisted.json"
     if not p.exists():
-        c = json.loads((ROOT / "config" / "scourge.json").read_text())
+        c = json.loads((ROOT / "config" / "scourge.json").read_text(encoding="utf-8"))
         c["banks"][UNLISTED_HOST] = dict(c["banks"]["netbanking.mockbank.test"], name="Not approved by AICTE")
-        p.write_text(json.dumps(c))
+        p.write_text(json.dumps(c), encoding="utf-8")
     return p
 
 
 def _session_for(inst):
-    st = json.loads(BANK_STATE.read_text())
+    st = json.loads(BANK_STATE.read_text(encoding="utf-8"))
     for k, v in st["sessions"].items():
         if v == inst:
             return k
@@ -107,7 +107,7 @@ def _run(job_id, challenge, fdr, mode, actor):
         host = bank["host"]
         path = "/api/accounts/summary" if mode["endpoint"] == "summary" else f"/api/fd/details?fd={fdr['fd_number']}"
         fd = os.open(hdr, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(f"Cookie: NB_SESSION={_session_for(fdr['institution_id'])}\nUser-Agent: scourge-demo-prover\n")
         args = [str(BIN / "scourge_prove"), "--config", str(_prover_config(target)), "--verifier", VERIFIER_CFG["verifier_listen"],
                 "--challenge-id", challenge["id"], "--institution", challenge["institution_id"], "--token", challenge["token"],

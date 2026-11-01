@@ -294,3 +294,20 @@ def test_mailer_sends_retries_and_fails(tmp_path, monkeypatch):
         assert kinds.count("email_sent") == 2 and kinds.count("email_failed") == 1
     finally:
         s.close(); _db._conn = None; _db.DB_PATH = old
+
+
+# ---------------------------------------------------------------- production sign-in policy
+@pytest.mark.parametrize("mode,override,expected", [("password", None, "True"), ("demo", None, "False"),
+                                                     ("demo", "1", "True"), ("password", "1", "True")])
+def test_mfa_mandatory_for_officers_in_password_mode(tmp_path, mode, override, expected):
+    import subprocess
+    env = {**os.environ, "SCOURGE_AUTH": mode, "SCOURGE_VAR": str(tmp_path)}
+    env.pop("SCOURGE_MFA_REQUIRED", None)
+    if override:
+        env["SCOURGE_MFA_REQUIRED"] = override
+    out = subprocess.run([sys.executable, "-c", "from app import main; print(main.MFA_REQUIRED, main.accounts.role_picker_allowed())"],
+                         cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr[-800:]
+    mfa, picker = out.stdout.split()[-2:]
+    assert mfa == expected
+    assert picker == ("False" if mode == "password" else "True")      # production refuses the demo role picker

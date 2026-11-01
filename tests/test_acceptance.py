@@ -33,6 +33,20 @@ class S:
         return self.c.get(url)
 
 
+def _server_up():
+    try:
+        return httpx.get(B + "/api/health", timeout=3).status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+# These tests drive the running app; without it they are skipped (with the reason), not reported as errors.
+# CI sets SCOURGE_REQUIRE_SERVER=1 so a dead server fails the build instead of skipping silently.
+if os.environ.get("SCOURGE_REQUIRE_SERVER") == "1" and not _server_up():
+    raise RuntimeError(f"SCOURGE_REQUIRE_SERVER=1 but the app is not reachable at {B}")
+pytestmark = pytest.mark.skipif(not _server_up(), reason=f"app not running at {B}: start ./scripts/run.sh first")
+
+
 def db():
     return sqlite3.connect(DB)
 

@@ -19,13 +19,40 @@ jobs:
       - name: Verify prebuilt binaries
         run: cd bin && sha256sum -c SHA256SUMS
       - name: Unit tests (no server)
-        run: python -m pytest -q tests/test_units.py tests/test_policy.py
+        run: python -m pytest -q tests/test_units.py tests/test_policy.py tests/test_backup.py
       - name: Start the portal (verifier and synthetic banks start with it)
         run: |
           ./scripts/run.sh > app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8080/api/health && break; sleep 1; done
       - name: Acceptance and browser tests (real prover and verifier, synthetic bank)
-        run: python -m pytest -q tests/test_acceptance.py tests/test_ui_journey.py
+        run: SCOURGE_REQUIRE_SERVER=1 python -m pytest -q tests/test_acceptance.py tests/test_ui_journey.py
       - name: App log on failure
         if: failure()
         run: tail -200 app.log
+
+  clean-install:
+    # What a reviewer gets with only requirements.txt: the whole suite must collect, fast tests pass.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt pytest httpx
+      - run: python -m pytest -q --collect-only tests > /dev/null
+      - run: python -m pytest -q tests/test_units.py tests/test_policy.py tests/test_backup.py
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start with docker compose
+        run: docker compose up -d --build
+      - name: Wait for health
+        run: for i in $(seq 1 90); do curl -sf http://127.0.0.1:8000/api/health && exit 0; sleep 2; done; docker compose logs; exit 1
+      - name: Backup and verify from the running stack
+        run: docker compose run --rm backup && ls -l backups/
+      - name: Restart recovers state
+        run: docker compose restart scourge && for i in $(seq 1 90); do curl -sf http://127.0.0.1:8000/api/health && exit 0; sleep 2; done; exit 1

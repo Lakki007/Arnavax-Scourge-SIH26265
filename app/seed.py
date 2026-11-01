@@ -66,12 +66,12 @@ def bank_state_initial():
 
 def write_bank_state(st):
     tmp = BANK_STATE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(st, indent=1))
+    tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
     tmp.replace(BANK_STATE)
 
 
 def read_bank_state():
-    return json.loads(BANK_STATE.read_text())
+    return json.loads(BANK_STATE.read_text(encoding="utf-8"))
 
 
 # Named demo accounts (DEMO MODE ONLY; SCOURGE_AUTH=password deployments create accounts with scripts/create_account.py).

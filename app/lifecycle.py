@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from . import db
 from .settings import ROOT
 
-RULES = json.loads((ROOT / "config" / "deposit_rules.json").read_text())
+RULES = json.loads((ROOT / "config" / "deposit_rules.json").read_text(encoding="utf-8"))
 ESC = RULES["reminders"]["escalation_after_days"]
 LADDER = [("officer", "Scrutiny officer"), ("regional_head", "Regional head"), ("authority", "Competent authority")]
 

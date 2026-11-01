@@ -6,7 +6,7 @@ Demo video (90 s): https://youtu.be/8HoplhFOGCg · Idea deck: [`docs/ppt/Scourge
 
 > **In one sentence:** an institution proves, from its own net-banking session, what the bank's server says about its security-deposit FDR; AICTE's verifier checks the proof and sees only that one deposit's record, so a forged, edited or out-of-date FDR cannot pass.
 
-Everything in this prototype runs against a **synthetic bank** with real cryptographic proofs. A proof of a logged-in FD page at a real bank is the open next step (see [Proven today](#8-proven-today-and-the-next-gate)).
+The prototype's workflow runs against a **synthetic bank** with real cryptographic proofs. On 30 Oct 2026 the same split-key session ran live against a real bank's production net-banking API (first bank tested: SBI: certificate verified, HTTP 200, about 1 s). Proving the account or FD data itself at a real bank is the next step (see [Proven today](#8-proven-today-and-the-next-gate)); until then the fallback in [`FEASIBILITY.md`](FEASIBILITY.md) applies and nothing is marked Verified without a proof.
 
 ---
 
@@ -187,11 +187,12 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Data per proof | about 39 MB between prover and verifier | Measured |
 | Bad deposits caught | 119 / 119 (an upload-and-approve baseline approved all 119) | Measured, 180 fresh synthetic deposits |
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
-| Automated tests | 115 pass, 2 deployment-only skipped | Local run |
-| Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages, **not** logged-in FD pages |
+| Automated tests | 259 pass, 2 deployment-only skipped | Local run, 1 Nov 2026 |
+| Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages |
+| Live real-bank MPC-TLS session | Logged-in API call, HTTP 200, ~1 s, ~357 MB traffic (first bank tested: SBI) | Measured; transport and certificate proven, account data **not yet** |
 | Software licence cost | ₹0 | Estimate |
 
-**Next gate:** prove a logged-in FD page at one real bank with our own account; survey which banks show liens and joint holders; take bank terms and AICTE acceptance to legal review.
+**Next gate:** prove the FD data itself at one real bank with a browser-extension prover (the replayed request was answered without account data); survey which banks show liens and joint holders; take bank terms and AICTE acceptance to legal review.
 
 ---
 
@@ -220,7 +221,7 @@ The technique (MPC-TLS / zkTLS) is established; our contribution is applying it 
 
 - that the bank's own database is correct (insider fraud at the bank is out of scope);
 - fields the bank's page does not show (reported as Insufficient evidence, never guessed);
-- anything about a real bank yet: all measured results use the synthetic bank;
+- account or FD data at a real bank: the live real-bank run proved the session, not the data; workflow results use the synthetic bank;
 - in the demo, the prover runs on the demo server so judges can click through; in deployment it runs on the institution's computer.
 
 Further detail: `docs/AUDIT.md` (security review), `docs/VERIFICATION.md` and `docs/PHASE4_VERIFICATION.md` (evidence), `docs/RUNBOOK.md` (operations), `docs/JUDGE_DEMO.md` (click-through script).

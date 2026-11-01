@@ -41,7 +41,7 @@ def start(name):
         if p and p.poll() is None:
             return True
         env = dict(os.environ, SCOURGE_INTERNAL_KEY=INTERNAL_KEY)
-        log = open(LOGS / f"{name}.log", "a")
+        log = open(LOGS / f"{name}.log", "a", encoding="utf-8")
         _procs[name] = subprocess.Popen(_cmd(name), cwd=ROOT, env=env, stdout=log, stderr=log, start_new_session=True)
     for _ in range(40):
         if port_open(name):

@@ -1,3 +1,5 @@
+> **Superseded in part (1 Nov 2026).** This is the 29 Oct snapshot and is kept unchanged below as a record. Since then: the suite has grown well past 100 tests (see README); a live split-key session ran against a real bank's production server on 30 Oct (first bank tested: SBI; [`tools/realbank/RESULTS.md`](../tools/realbank/RESULTS.md)) — the transport and certificate are proven, the account data is not yet; named accounts with mandatory officer 2FA, the full release workflow, and backup/restore were added. Current controls: [`SECURITY.md`](SECURITY.md). Deployment and bank coverage: [`FEASIBILITY.md`](FEASIBILITY.md).
+
 # Phase 4: judge-readiness verification (29 Oct 2026)
 
 **Release:** `v1.0.0-rc1`, `scourge_prototype.zip` (sha256 in `docs/RELEASE.txt`).

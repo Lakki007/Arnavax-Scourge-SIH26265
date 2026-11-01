@@ -14,7 +14,7 @@ from . import db
 from .settings import ROOT
 
 MAX_ATTEMPTS = 5
-CONTACTS = json.loads((ROOT / "config" / "contacts.json").read_text())
+CONTACTS = json.loads((ROOT / "config" / "contacts.json").read_text(encoding="utf-8"))
 
 
 def configured() -> bool:

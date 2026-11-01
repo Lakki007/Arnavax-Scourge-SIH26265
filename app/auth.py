@@ -1,4 +1,6 @@
-"""Demo sign-in (no passwords; DEMO MODE ONLY) with signed session cookies and CSRF tokens.
+"""Signed session cookies, CSRF tokens and server-side role checks.
+Sign-in itself lives in app/main.py: named accounts (scrypt, lockout, mandatory officer 2FA) in production
+(SCOURGE_AUTH=password); demo mode additionally offers a role chooser for judges.
 Roles: officer (AICTE Regulation Bureau) and institution:<id>. Every route checks the role server-side."""
 import base64
 import hashlib

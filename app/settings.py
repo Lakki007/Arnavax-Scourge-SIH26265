@@ -19,16 +19,16 @@ JOBTMP = VAR / "jobs"
 for d in (VAR, LOGS, UPLOADS, JOBTMP):
     d.mkdir(parents=True, exist_ok=True)
 
-VERIFIER_CFG = json.loads(CONFIG_PATH.read_text())
-DEMO = json.loads(DEMO_PATH.read_text())
+VERIFIER_CFG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+DEMO = json.loads(DEMO_PATH.read_text(encoding="utf-8"))
 
 
 def _secret(name: str, nbytes: int = 32) -> str:
     p = VAR / name
     if not p.exists():
-        p.write_text(secrets.token_hex(nbytes))
+        p.write_text(secrets.token_hex(nbytes), encoding="utf-8")
         os.chmod(p, 0o600)
-    return p.read_text().strip()
+    return p.read_text(encoding="utf-8").strip()
 
 
 INTERNAL_KEY = os.environ.get("SCOURGE_INTERNAL_KEY") or _secret("internal.key")

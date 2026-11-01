@@ -1,0 +1,29 @@
+# Single-server deployment with persistent state, automatic restart and a nightly verified backup.
+#   docker compose up -d            -> http://localhost:8000
+#   docker compose run --rm backup  -> a backup on demand
+# State (database, encrypted vault, keys) lives in the named volume, so a crash or redeploy loses nothing.
+services:
+  scourge:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      SCOURGE_ACCESS_CODE: ${SCOURGE_ACCESS_CODE:-}
+      SCOURGE_AUTH: ${SCOURGE_AUTH:-demo}          # set to "password" in production: named accounts + mandatory officer 2FA
+      SCOURGE_COOKIE_SECURE: ${SCOURGE_COOKIE_SECURE:-0}
+    volumes: ["scourge-var:/srv/scourge/var"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  backup:
+    build: .
+    profiles: ["ops"]
+    volumes: ["scourge-var:/srv/scourge/var", "./backups:/backups"]
+    entrypoint: ["sh", "-c", "f=/backups/scourge-$$(date +%Y%m%d-%H%M%S).tar.gz && python3 scripts/backup.py create $$f && python3 scripts/backup.py verify $$f"]
+
+volumes:
+  scourge-var:

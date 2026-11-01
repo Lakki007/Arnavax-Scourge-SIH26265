@@ -6,10 +6,24 @@ import re
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import expect, sync_playwright
+pytest.importorskip("playwright", reason="browser journey needs Playwright (pip install -r requirements-dev.txt)")
+from playwright.sync_api import expect, sync_playwright  # noqa: E402
 
 B = os.environ.get("SCOURGE_URL", "http://127.0.0.1:8080")
 SHOTS = "var/shots"
+
+
+def _server_up():
+    import urllib.request
+    try:
+        return urllib.request.urlopen(B + "/api/health", timeout=3).status == 200
+    except OSError:
+        return False
+
+
+if os.environ.get("SCOURGE_REQUIRE_SERVER") == "1" and not _server_up():
+    raise RuntimeError(f"SCOURGE_REQUIRE_SERVER=1 but the app is not reachable at {B}")
+pytestmark = pytest.mark.skipif(not _server_up(), reason=f"app not running at {B}: start ./scripts/run.sh first")
 
 
 @pytest.fixture(scope="module")
