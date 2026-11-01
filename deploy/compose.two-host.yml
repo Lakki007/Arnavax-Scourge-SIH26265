@@ -1,0 +1,41 @@
+# Two independent services, as AICTE would deploy them: the portal and AICTE's verifier in separate
+# containers (in production: separate hosts/VMs joined by a private network or VPN).
+#   docker compose -f deploy/compose.two-host.yml up -d --build
+# The verifier has no database and no documents. It exposes 7047 to provers (institutions) and reaches
+# the portal only on the private "aicte-internal" network, authenticated by SCOURGE_INTERNAL_KEY.
+name: scourge-two-host
+services:
+  portal:
+    build: ..
+    environment:
+      SCOURGE_VERIFIER: external
+      SCOURGE_VERIFIER_ADDR: verifier:7047
+      SCOURGE_INTERNAL_KEY: ${SCOURGE_INTERNAL_KEY:?set a long random SCOURGE_INTERNAL_KEY}
+      SCOURGE_AUTH: ${SCOURGE_AUTH:-demo}
+      SCOURGE_ACCESS_CODE: ${SCOURGE_ACCESS_CODE:-}
+    ports: ["8000:8000"]
+    networks: [public, aicte-internal]
+    volumes: ["portal-var:/srv/scourge/var"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      start_period: 40s
+
+  verifier:
+    build: ..
+    entrypoint: ["./deploy/verifier/entrypoint.sh"]
+    environment:
+      SCOURGE_INTERNAL_KEY: ${SCOURGE_INTERNAL_KEY:?set a long random SCOURGE_INTERNAL_KEY}
+      SCOURGE_APP_INTERNAL: portal:8081
+    ports: ["7047:7047"]
+    networks: [public, aicte-internal]
+    restart: unless-stopped
+
+networks:
+  public: {}
+  aicte-internal:
+    internal: true
+
+volumes:
+  portal-var:

@@ -9,7 +9,7 @@ import threading
 import time
 
 from . import db
-from .settings import BANK_STATE, BIN, DEMO, JOBTMP, ROOT, VERIFIER_CFG
+from .settings import BANK_STATE, BIN, DEMO, JOBTMP, ROOT, VERIFIER_ADDR, VERIFIER_CFG
 from .views import copy_path
 
 _slots = threading.BoundedSemaphore(DEMO["max_concurrent_proofs"])
@@ -109,7 +109,7 @@ def _run(job_id, challenge, fdr, mode, actor):
         fd = os.open(hdr, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(f"Cookie: NB_SESSION={_session_for(fdr['institution_id'])}\nUser-Agent: scourge-demo-prover\n")
-        args = [str(BIN / "scourge_prove"), "--config", str(_prover_config(target)), "--verifier", VERIFIER_CFG["verifier_listen"],
+        args = [str(BIN / "scourge_prove"), "--config", str(_prover_config(target)), "--verifier", VERIFIER_ADDR,
                 "--challenge-id", challenge["id"], "--institution", challenge["institution_id"], "--token", challenge["token"],
                 "--fd-number", fdr["fd_number"], "--url", f"https://{host}{path}", "--headers-file", str(hdr),
                 "--connect-addr", f"127.0.0.1:{bank['port']}", "--max-sent", "2048", "--max-recv", "16384",

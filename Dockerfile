@@ -6,7 +6,7 @@ WORKDIR /srv/scourge
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-RUN rm -rf var && chmod +x scripts/*.sh bin/* && cp deploy/nginx.container.conf /etc/nginx/conf.d/default.conf && rm -f /etc/nginx/sites-enabled/default
+RUN rm -rf var && chmod +x scripts/*.sh bin/* && cp deploy/nginx.container.conf /etc/nginx/conf.d/default.conf && cp deploy/nginx.internal.conf /etc/nginx/conf.d/internal.conf && rm -f /etc/nginx/sites-enabled/default
 ENV SCOURGE_COOKIE_SECURE=0 PORT=8000
 EXPOSE 8000
 HEALTHCHECK CMD curl -sf http://127.0.0.1:8080/api/health || exit 1

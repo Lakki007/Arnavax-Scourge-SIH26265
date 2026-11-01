@@ -45,6 +45,8 @@ Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traf
 
 | Concern | How | Evidence |
 |---|---|---|
+| Independent AICTE verifier | Separate container/VM with no database or documents; reaches the portal only over a private network with a shared key; the portal cannot start or stop it (`docs/DEPLOYMENT.md`, `deploy/compose.two-host.yml`) | CI job `two-host`: proof verified through it; `test_external_verifier_mode_is_never_started_or_stopped_by_the_portal` |
+| Production sign-in, end to end | Named accounts and mandatory officer 2FA through challenge, proof, clearances, step-up approval, bank acknowledgement and public verification | `tests/test_production_mode.py`, CI job `production-mode` |
 | Reproducible deployment | `Dockerfile`, `docker-compose.yml` (persistent volume, health check, `restart: unless-stopped`), `render.yaml` | CI job `container`: compose up, health, backup + verify, restart |
 | Verifier or bank down | Proof fails with a reason; challenge stays unused; retry works | `test_verifier_down_keeps_challenge_and_retry_works`, `test_bank_down_is_rejected_with_reason_not_faked`, `test_failed_dependency_and_retry` |
 | Crash during release approval | One transaction; everything rolls back | `test_g07_g08_failure_mid_approval_rolls_everything_back` |
@@ -55,7 +57,7 @@ Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traf
 
 ## 5. Pilot path
 
-1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 266 automated tests.
+1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 270 automated tests.
 2. ✓ Live real-bank MPC-TLS session (first bank tested: SBI).
 3. Browser-extension prover → FD data proven at 3 large banks. [Open]
 4. One AICTE regional office, tiers 1–3 together, against its current register. [Open]

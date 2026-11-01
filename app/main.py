@@ -20,6 +20,7 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import settings
 from . import accounts, auth, db, eadvice, i18n, jobs, lifecycle, mailer, policy, procs, reports, seed, totp, vault, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
@@ -1890,6 +1891,8 @@ def service(request: Request, csrf: str = Form(""), name: str = Form(...), op: s
     auth.check_csrf(s, csrf)
     if name not in procs.ALL or op not in ("start", "stop"):
         raise HTTPException(400, "Unknown service operation.")
+    if procs.external(name):
+        raise HTTPException(409, "The verifier runs independently on AICTE's own host (SCOURGE_VERIFIER=external); the portal cannot start or stop it.")
     ok = procs.start(name) if op == "start" else procs.stop(name)
     db.event(auth.actor(s), f"service_{op}", None, service=name, ok=ok)
     if not ok:
@@ -1914,4 +1917,4 @@ def reset(request: Request, csrf: str = Form("")):
 
 @app.get("/api/health")
 def health():
-    return {"services": procs.health(), "trust_mode": VERIFIER_CFG["trust"]["mode"], "allow_hosts": VERIFIER_CFG["allow_hosts"]}
+    return {"services": procs.health(), "verifier_mode": settings.VERIFIER_MODE, "trust_mode": VERIFIER_CFG["trust"]["mode"], "allow_hosts": VERIFIER_CFG["allow_hosts"]}

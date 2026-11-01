@@ -15,13 +15,16 @@ Every row is enforced server-side and has an automated test. File paths are rela
 | Money compared in integer paise; holders compared whole | `app/policy.py` | `test_money_is_exact_paise`, `test_holder_is_compared_whole` |
 | Fallback evidence cannot override a proven discrepancy | e-advice / branch tiers | `test_branch_cannot_override_session_discrepancy`, `test_forged_or_altered_eadvice_is_rejected` |
 
+| Verifier deployable independently; portal cannot start/stop it; internal API on a private network with a shared key | `SCOURGE_VERIFIER=external`, `deploy/nginx.internal.conf`, `deploy/compose.two-host.yml` | `test_external_verifier_mode_is_never_started_or_stopped_by_the_portal`, CI `two-host` |
+
 ## Identity and access
 
 | Control | Code | Test |
 |---|---|---|
 | Named accounts, scrypt (n=2^14), 12+ character passwords, lockout after 5 failures | `app/accounts.py`, `/signin/password` | `test_password_hashing_and_strength`, `test_named_accounts_password_signin_and_lockout` |
 | **Officer 2FA (TOTP, RFC 6238) mandatory in production** (`SCOURGE_AUTH=password`); demo role chooser refused | `MFA_REQUIRED` in `app/main.py`, `scripts/create_account.py` enrols at creation | `test_units.py::test_mfa_mandatory_for_officers_in_password_mode`, `test_two_factor_signin_lockout_and_step_up` |
-| Fresh 2FA code (step-up) to approve a release | `step_up()` | `test_two_factor_signin_lockout_and_step_up` |
+| Fresh 2FA code (step-up) to approve a release | `step_up()` | `test_two_factor_signin_lockout_and_step_up`, `test_production_mode.py` |
+| Whole lifecycle with named accounts only (no demo personas in the audit log) | `SCOURGE_AUTH=password` | `test_production_mode.py::test_full_lifecycle_under_production_sign_in` |
 | Replayed TOTP code refused | `app/totp.py` | `test_totp_verify_window_and_replay` |
 | Signed session cookies, CSRF token on every POST, safe redirects | `app/auth.py` | `test_signin_next_cannot_redirect_off_site`, `test_permissions` |
 | Institutions see only their own deposits and proofs | `can_see_fdr()` | `test_no_proof_bytes_for_anonymous_or_other_institution`, `test_permissions` |

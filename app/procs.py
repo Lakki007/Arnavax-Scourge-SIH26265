@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 
-from .settings import BANK_STATE, BIN, DEMO, INTERNAL_KEY, LOGS, ROOT, VERIFIER_CFG
+from .settings import BANK_STATE, BIN, DEMO, INTERNAL_KEY, LOGS, ROOT, VERIFIER_ADDR, VERIFIER_MODE
 
 _procs: dict[str, subprocess.Popen] = {}
 _lock = threading.Lock()
@@ -22,7 +22,7 @@ def _cmd(name):
 
 def addr(name):
     if name == "verifier":
-        h, p = VERIFIER_CFG["verifier_listen"].split(":")
+        h, p = VERIFIER_ADDR.rsplit(":", 1)
         return h, int(p)
     return "127.0.0.1", DEMO["banks"][name]["port"]
 
@@ -35,7 +35,13 @@ def port_open(name, timeout=0.3):
         return False
 
 
+def external(name):
+    return name == "verifier" and VERIFIER_MODE == "external"
+
+
 def start(name):
+    if external(name):
+        return port_open(name, timeout=2)   # run by AICTE on its own host; never started from here
     with _lock:
         p = _procs.get(name)
         if p and p.poll() is None:
@@ -53,6 +59,8 @@ def start(name):
 
 
 def stop(name):
+    if external(name):
+        return False                         # an independent verifier cannot be stopped by the portal
     with _lock:
         p = _procs.pop(name, None)
     if p and p.poll() is None:
@@ -69,6 +77,8 @@ def stop(name):
 
 
 def running(name):
+    if external(name):
+        return port_open(name, timeout=1)
     p = _procs.get(name)
     return bool(p and p.poll() is None and port_open(name))
 

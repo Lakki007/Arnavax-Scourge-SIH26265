@@ -22,6 +22,13 @@ for d in (VAR, LOGS, UPLOADS, JOBTMP):
 VERIFIER_CFG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 DEMO = json.loads(DEMO_PATH.read_text(encoding="utf-8"))
 
+# Verifier placement. "local" (default): this app starts scourge_verifierd as a separate process on this host.
+# "external": AICTE runs the verifier on its own host/container (deploy/verifier/); the app never starts or
+# stops it, provers are pointed at SCOURGE_VERIFIER_ADDR, and the verifier reports back to the app's
+# internal API over a private network with the shared SCOURGE_INTERNAL_KEY.
+VERIFIER_MODE = os.environ.get("SCOURGE_VERIFIER", "local")
+VERIFIER_ADDR = os.environ.get("SCOURGE_VERIFIER_ADDR", VERIFIER_CFG["verifier_listen"])
+
 
 def _secret(name: str, nbytes: int = 32) -> str:
     p = VAR / name

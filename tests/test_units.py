@@ -311,3 +311,17 @@ def test_mfa_mandatory_for_officers_in_password_mode(tmp_path, mode, override, e
     mfa, picker = out.stdout.split()[-2:]
     assert mfa == expected
     assert picker == ("False" if mode == "password" else "True")      # production refuses the demo role picker
+
+
+def test_external_verifier_mode_is_never_started_or_stopped_by_the_portal(tmp_path):
+    import subprocess
+    env = {**os.environ, "SCOURGE_VAR": str(tmp_path), "SCOURGE_VERIFIER": "external", "SCOURGE_VERIFIER_ADDR": "127.0.0.9:1"}
+    code = ("from app import procs, jobs, settings; "
+            "assert procs.external('verifier') and not procs.external('genuine'); "
+            "assert procs.stop('verifier') is False; "
+            "assert procs.start('verifier') is False; "              # nothing listening there: reported down, not spawned
+            "assert 'verifier' not in procs._procs; "
+            "assert procs.addr('verifier') == ('127.0.0.9', 1); "
+            "assert settings.VERIFIER_ADDR == '127.0.0.9:1'; print('ok')")
+    out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr[-800:]

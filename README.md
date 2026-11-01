@@ -30,7 +30,7 @@ An institution proves, from its own net-banking session, what the bank's server 
  scourge_prove ── runs per proof (demo: on this server; real: on the institution's computer)
 ```
 
-**One adjustment from the approved architecture:** the app also supervises the verifier and banks, and runs the demo prover, so a judge can operate everything from one browser. They stay separate OS processes. The verifier never shares memory with the app, and talks to it only through two internal endpoints (localhost plus a secret key).
+**Demo vs deployment:** in production the verifier runs independently on AICTE's own host (`SCOURGE_VERIFIER=external`, [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)). In the demo the app also supervises the verifier and banks, and runs the demo prover, so a judge can operate everything from one browser. They stay separate OS processes. The verifier never shares memory with the app, and talks to it only through two internal endpoints (localhost plus a secret key).
 
 ## Setup and run (Linux x86_64; tested on Python 3.13, Chromium via Playwright)
 
@@ -40,6 +40,8 @@ pip install -r requirements.txt          # tests: pip install -r requirements-de
 ./scripts/build_rust.sh        # optional: rebuild bin/ from source (clones TLSNotary at a pinned commit)
 ./scripts/run.sh               # http://127.0.0.1:8080 (always loopback; publish with deploy/nginx.conf)
 ```
+
+Independent verifier (portal and AICTE's verifier as separate services): see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 Or with Docker: `docker compose up -d` (persistent volume, restart on failure, health check). Backup on demand: `docker compose run --rm backup`.
 
@@ -77,7 +79,7 @@ python3 -m pytest -q tests/test_policy.py tests/test_units.py tests/test_backup.
 
 pip install -r requirements-dev.txt && python3 -m playwright install chromium
 ./scripts/run.sh &                                  # acceptance and browser tests drive the running app
-python3 -m pytest -q tests/                         # full suite: 266 pass, 2 skipped (deployment access-code gate)
+python3 -m pytest -q tests/                         # full suite: 267 pass; plus 3 production-mode tests (tests/test_production_mode.py) against a server started with SCOURGE_AUTH=password
 python3 scripts/shots.py var/shots                  # screenshots of every page, desktop and mobile; reports console errors and 5xx
 ```
 
