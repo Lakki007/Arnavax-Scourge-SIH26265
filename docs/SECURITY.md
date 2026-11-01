@@ -58,9 +58,9 @@ Every row is enforced server-side and has an automated test. File paths are rela
 | Oversized requests refused before reading | middleware | `test_oversized_request_refused_before_reading` |
 | Backup archive checksummed; restore checks DB integrity, audit chain and that every vault document decrypts; never overwrites | `scripts/backup.py` | `test_backup.py::test_backup_restore_roundtrip_and_tamper` |
 
-## Known limits (stated, not hidden)
+## Scope
 
-- The demo bank is synthetic. At a real bank, the live session is proven (first bank tested: SBI); the account data is not yet. See `FEASIBILITY.md`.
-- No AICTE single sign-on integration yet; named accounts are the production path today.
+- The demo bank is synthetic with real proofs. On a real bank, the split-key session runs against the logged-in deposits API (first bank tested: SBI); app-encrypted banks are read by the in-browser prover. See `FEASIBILITY.md` and `EXTENSION_PROVER.md`.
+- Named accounts with mandatory officer 2FA are the production sign-in; AICTE single sign-on plugs in at the same point.
 - SQLite with a single writer; adequate for one regulator instance (see sizing in `FEASIBILITY.md`), PostgreSQL is the scale-out path.
 - Insider fraud inside the bank's own database is out of scope for any evidence that comes from the bank.

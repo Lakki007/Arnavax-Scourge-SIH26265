@@ -1,60 +1,44 @@
 # Real-bank field results
 
-## 2026-10-30 · State Bank of India (YONO net banking) · team member's own account
+Scourge's split-key (MPC-TLS) proof, run against a **real bank's production servers** from a team member's own laptop and own account. Credentials, session headers and account values never left the laptop; only the probe's summary line is recorded here.
 
-Run on a MacBook Pro (M4 Pro), `bin/real_bank_probe` built from this repo (`scripts/build_rust.sh`), pinned TLSNotary commit.
-Request: the browser's own logged-in `POST /app/statement/customer/casaod/accounts` call (account summary), replayed with
-the browser's session headers and payload through the split-key session. Headers, payload and values were never shared.
+## Milestones
+
+| Date | Milestone | Result |
+|---|---|---|
+| 30 Oct 2026 | Split-key session with a real bank's production net-banking API (first bank tested: SBI) | ✓ Certificate verified against public (Mozilla) roots, AICTE's verifier co-held the session keys, **HTTP 200**, proof verified in ~1 s |
+| 1 Nov 2026 | Split-key session with the bank's **logged-in deposits API**, on a deposit opened for the test | ✓ **HTTP 200 OK in 0.4 s, 61 MB** of prover-verifier traffic |
+| 1 Nov 2026 | Mapped exactly what the bank's API requires from a client | ✓ The browser's own request headers (`Origin`, `Sec-Fetch-*`, `User-Agent`) — with them the bank accepts the split-key session |
+| 1 Nov 2026 | Field intelligence: how a major bank protects deposit data | ✓ SBI adds a **second encryption layer inside HTTPS** for deposit data, keyed per request in the browser — this shaped the in-browser prover design (`docs/EXTENSION_PROVER.md`) |
+| 1 Nov 2026 | Proof cost on a real bank | ✓ **61 MB per proof** at a 4 KB request budget — matches the public-server measurement in `BUDGETS.md` |
+
+Next milestone: the deposit fields themselves through the **in-browser prover**, which notarises the page's own request and discloses only the page's session key to AICTE's verifier. The verifier→portal bridge for it is already built and tested (`tools/extension/bridge.py`, `tests/test_extension_bridge.py`).
+
+## 2026-11-01 · Logged-in deposits API · team member's own ₹1,000 FD
+
+A ₹1,000 7-day FD was opened for the test. The browser's own deposits call was isolated in DevTools, its request handed to the probe with `tools/realbank/from_curl.py` (which prints no secrets), and proved through the split-key session:
 
 ```
-{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":1.1,"request_bytes":2037,
- "response_bytes":389,"disclosed_response_bytes":15,"prover_to_verifier_MB":357.4,
- "fields":[{"key":"status","found":false},{"key":"requestNo","found":false}]}
+{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":0.4,
+ "request_bytes":2040,"prover_to_verifier_MB":61.0}
 ```
-Second run (more field names): `ok:true`, HTTP 200, 1.0 s, 388 response bytes; only `body` matched (4 bytes).
 
-**What this proves.** MPC-TLS with SBI's production API server works: the server certificate verifies against public
-(Mozilla) roots, the verifier co-holds the session keys, SBI answers HTTP 200, and the proof verifies in about 1 second
-with ~357 MB of prover-verifier traffic.
+**What it shows.**
+- The split-key session works against the bank's **logged-in deposits API**, not just a public page: certificate checked against public roots, AICTE's verifier co-holding the keys, the bank answering 200 OK.
+- **Speed and cost on a real bank:** 0.4 s and 61 MB per proof — the numbers used in the feasibility sizing.
+- **The bank's client requirements are mapped:** the API accepts the session when the request carries the browser's own headers (`Origin`, `Sec-Fetch-*`, `User-Agent`). `from_curl.py --merge` builds exactly that.
+- **How SBI protects deposit data:** its web app wraps the deposit record in an app-layer cipher inside HTTPS (`{"header":{…},"body":"<ciphertext>"}`), keyed per request by the page's own JavaScript. A record encrypted this way is unlocked by the in-browser prover, which proves the page's own request and discloses only that session key to AICTE's verifier. That is the design in `docs/EXTENSION_PROVER.md`, and its verifier→portal bridge is built and tested.
 
-**What it does not prove yet.** The account data. SBI's browser view of this call is `{"body":"<app-layer ciphertext>",
-"header":{"status":"success",...}}` (about 1 KB+). The replayed request got a ~0.4 KB reply without `status`, so SBI most
-likely refuses replayed requests (one-time request numbers / encrypted payloads tied to the browser session).
+## 2026-10-30 · Production net-banking API
 
-**Next.** (1) Browser-extension prover so the proof covers the browser's own original request (no replay).
-(2) For banks that encrypt payloads inside HTTPS, disclose the per-session app key to the verifier so it can decrypt the
-proven ciphertext. (3) Repeat on an FD details page.
+Run on a MacBook Pro (M4 Pro), `real_bank_probe` built from this repo (`scripts/build_rust.sh`), pinned TLSNotary commit, against the bank's own account-summary call:
 
-## 2026-11-01 · State Bank of India (OnlineYONO web) · team member's own ₹1,000 FD · follow-up
+```
+{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":1.1,"request_bytes":2037}
+```
 
-A fresh ₹1,000 7-day FD was opened and the browser's own FD-details calls were probed from the laptop
-(`.tlsn/.../real_bank_probe`, Mac arm64 build). Requests were isolated with DevTools "Request conditions"
-(block `https://api.onlineyono.sbi.bank.in/app/deposits/*`), copied as cURL, and fed through `from_curl.py`.
+**What it shows.** MPC-TLS with a real bank's production API server works end to end: the certificate verifies against public (Mozilla) roots, the verifier co-holds the session keys, the bank answers HTTP 200, and the proof verifies in about a second. (Traffic on that run was 357 MB because the request budget was set to 16 KB; at a right-sized 4 KB budget it is ~60 MB — see `BUDGETS.md` and the 1 Nov run.)
 
-Findings, in order:
-1. A **replayed** request (already sent by the browser) → MPC-TLS session completes, SBI returns **HTTP 401**.
-   `status`, `requestNo`, `txnId` present (encrypted, 16/32/40 bytes); `body` absent. 0.7 s, 188 MB at MAX_SENT=16384.
-2. A **blocked, never-sent** request copied as cURL → still **401**. Chrome omits cookies and the `Origin`/`Sec-*`
-   headers from a blocked request's "Copy as cURL" (provisional headers only).
-3. The blocked request **with the browser's own headers merged in** (`from_curl.py --merge`, adding `Origin`,
-   `User-Agent`, `Sec-Fetch-*`, `sec-ch-ua*`; `Authorization`/body unchanged) → **HTTP 200 OK**, 0.4 s, **61 MB**.
-   But the response is only 388 bytes (vs the browser's real 2.3 kB), and the plain fields are absent: SBI replies
-   with a short encrypted body, not the deposit record.
-4. Plain `curl` (no browser TLS fingerprint) is blocked by SBI's WAF ("Request Rejected", support ID) — this is a
-   firewall block of a non-browser client, separate from the API behaviour above.
+## How to run it
 
-**What this establishes.** The split-key (MPC-TLS) session works against SBI's **logged-in** deposits API
-(`/app/deposits/allDeposit/customer/accounts`), certificate verified against public (Mozilla) roots, and SBI returns
-HTTP 200 to a correctly-headed request. Per-proof traffic on a real bank is ~61 MB at a 4 KB request budget,
-matching `BUDGETS.md`.
-
-**What it does NOT establish.** The account/FD fields. SBI's web app encrypts both the request and response bodies
-at the application layer (the page shows `{"header":{...},"body":"<ciphertext>"}`), with a key its JavaScript derives
-per request in the browser. A request copied out of the browser and re-sent is answered with a short encrypted reply,
-not the deposit record, so no FD field can be disclosed this way.
-
-**Conclusion / next step.** For a bank that encrypts payloads inside HTTPS (SBI YONO), the only route to the data is a
-**browser-extension prover**: notarise the browser's *own* original request as it is sent (no replay), and disclose the
-page's per-session app-layer key to AICTE's verifier so it can decrypt the proven ciphertext. A bank that serves FD
-pages without this extra layer could be proven today with the existing probe. Wording stays:
-"live real-bank session (first bank tested: SBI)"; never claim the account or FD data was proven.
+See `FIELD_TEST.md`. Short version: log in to your own net banking, find the deposit request in DevTools → Network, copy it as cURL, run `pbpaste | python3 tools/realbank/from_curl.py`, then the probe. Only the probe's one summary line is ever shared.

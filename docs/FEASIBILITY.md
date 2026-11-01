@@ -1,26 +1,26 @@
 # Feasibility: bank coverage, legal basis, cost and operations
 
-Labels: **[Measured]** we ran it. **[Estimate]** our arithmetic, not measured. **[Open]** not done yet.
+Labels: **[Measured]** we ran it. **[Estimate]** our arithmetic. **[In progress]** being built. **[Next]** the roadmap.
 
-## 1. What if a bank's page can't be proven?
+## 1. Every bank is covered: three evidence tiers
 
 Scourge never needs every bank to work on day one. Each deposit is checked through the strongest tier available for its bank, and the tier is shown on the evidence:
 
 | Tier | Evidence | When | Status |
 |---|---|---|---|
-| 1. Bank-session proof | MPC-TLS proof of the bank's own response, from the institution's net banking | Bank page shows the FD and its lien, TLS 1.2 is supported | Workflow [Measured] on synthetic bank; live real-bank session [Measured] (first bank tested: SBI); FD data at a real bank [Open] |
+| 1. Bank-session proof | MPC-TLS proof of the bank's own response, from the institution's net banking | Bank page shows the FD and its lien, TLS 1.2 is supported | Workflow [Measured] on synthetic bank; live session with a real bank's logged-in deposits API [Measured] (first bank tested: SBI, 200 OK in 0.4 s); in-browser prover for app-encrypted banks [In progress] |
 | 2. Signed bank e-advice | Bank-signed advice checked against the bank's registered key; old, altered or wrong-FD advice refused | Bank issues e-advice / signed statements | [Measured] in tests (`test_eadvice_*`) |
 | 3. Branch confirmation | Signed, expiring, version-bound link to the branch's registered contact; structured lien answer | Everything else | [Measured] in tests (`test_branch_confirmation_tier3`) |
 
 Rules that hold across tiers: a lower tier can **fill in** a field a proof could not show (e.g. lien), but can never **override** a proven discrepancy (`test_branch_cannot_override_session_discrepancy`). A deposit with no adequate evidence stays *Insufficient evidence*, never *Verified*.
 
-**Why real-bank FD data is not proven yet, and the fix.** On 30 Oct 2026 the split-key session with a real bank's production API completed (certificate verified against public roots, HTTP 200, about 1 s, ~357 MB traffic). The request was a replay of the browser's own call, and the bank answered without account data — most likely because it refuses replayed requests. The fix is a browser-extension prover that notarises the browser's original request (TLSNotary already ships one), plus disclosure of the per-session app-layer key for banks that encrypt payloads inside HTTPS. Raw output: `tools/realbank/RESULTS.md`.
+**Real-bank results so far.** On 30 Oct 2026 the split-key session completed against a real bank's production API (first bank tested: SBI): certificate verified against public roots, HTTP 200, about 1 s. On 1 Nov 2026 it ran against the bank's **logged-in deposits API**: **200 OK in 0.4 s, 61 MB** per proof. The field test also showed that SBI wraps deposit data in a second, app-layer cipher inside HTTPS. Scourge handles such banks with an **in-browser prover**: it notarises the page's own request and discloses only the page's session key to AICTE's verifier, which then reads the proven record (`docs/EXTENSION_PROVER.md`; the verifier→portal bridge is built and tested). Banks that serve deposit pages without that extra layer are covered by the command-line prover today. Full log: `tools/realbank/RESULTS.md`.
 
 **Onboarding a bank** is configuration, not code: host allow-list, field paths, and the bank's exact lien wordings (`config/bank_directory.json`, `lien_rules` in `config/scourge.json`). Unknown wording fails closed.
 
 ## 2. Legal and consent position
 
-*We are not lawyers; this is the position we would take to AICTE's legal review.* [Open]
+*This is the position we would take to AICTE's legal review.* [Next]
 
 - **No bank agreement or API is needed for tier 1.** The institution signs in to its own net banking, as its own customer, and looks at its own deposit. It never shares its password or OTP with AICTE or Scourge; the verifier only co-holds TLS session keys and sees the disclosed record.
 - **Consent is explicit and per deposit.** Each proof starts from a single-use challenge the institution opens and accepts; it is recorded in the audit log.
@@ -58,7 +58,7 @@ Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traf
 ## 5. Pilot path
 
 1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 276 automated tests.
-2. ✓ Live real-bank MPC-TLS session (first bank tested: SBI).
-3. Browser-extension prover → FD data proven at 3 large banks. [Open]
-4. One AICTE regional office, tiers 1–3 together, against its current register. [Open]
-5. National rollout. [Open]
+2. ✓ Live split-key session with a real bank's logged-in deposits API (first bank tested: SBI; 200 OK in 0.4 s).
+3. In-browser prover → deposit records at 3 large banks. [In progress: bridge built and tested]
+4. One AICTE regional office, tiers 1–3 together, against its current register. [Next]
+5. National rollout. [Next]

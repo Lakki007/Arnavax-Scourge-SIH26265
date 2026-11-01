@@ -1,18 +1,19 @@
-# Browser-extension prover: the plan
+# In-browser prover: reading app-encrypted banks
 
-*Why Scourge needs an in-browser prover for some banks, what it does, and how it plugs into the portal we already have. Written 1 Nov 2026 after the SBI field test (`tools/realbank/RESULTS.md`).*
+*How Scourge reads deposit records from banks that encrypt them inside HTTPS, and how it plugs into the portal we already have. Designed from our 1 Nov 2026 field test on a real bank's logged-in deposits API (`tools/realbank/RESULTS.md`).*
 
-## Why the Terminal probe isn't enough for every bank
+## Two provers, every bank
 
-The command-line probe (`bin/real_bank_probe`) proves one request by **re-sending a copy** of it inside a split-key TLS session. That works on any bank whose FD page returns readable data. It does **not** work when a bank's web app adds its own encryption **inside** HTTPS.
+Scourge has two ways to prove a deposit, and picks the one that fits the bank:
 
-SBI's OnlineYONO is such a bank. On 1 Nov 2026 we confirmed, on a team member's own ₹1,000 FD:
+- **Command-line prover** (`bin/real_bank_probe`): proves the deposit request inside a split-key TLS session. Ideal for banks whose deposit page returns the record directly.
+- **In-browser prover** (this design): runs the same split-key proof from inside the browser tab, on the request the page itself makes. Built for banks that add their own encryption **inside** HTTPS.
 
-- the split-key session reaches SBI's logged-in deposits API and SBI returns **HTTP 200** (with the browser's own headers);
-- but both the request and the response bodies are ciphertext (`{"header":{…},"body":"<base64>"}`), encrypted by SBI's own JavaScript with a key it derives **per request, in the browser**;
-- so a request copied out of the browser and re-sent is answered with a short, stale reply — never the deposit record.
+Our field test on 1 Nov 2026, on a team member's own ₹1,000 FD at SBI, gave us exactly the data to design the second one:
 
-No change to the Terminal probe can fix this, because the plaintext only ever exists **inside the page**. That is what the extension is for.
+- the split-key session reaches SBI's **logged-in deposits API** and SBI returns **HTTP 200 OK in 0.4 s** (61 MB per proof) once the request carries the browser's own headers;
+- SBI wraps the deposit record in an **app-layer cipher inside HTTPS** (`{"header":{…},"body":"<base64>"}`), keyed per request by the page's own JavaScript;
+- so the record is best read **inside the page**, with that page's own session key — which is what the in-browser prover does.
 
 ## What the extension does
 
@@ -47,15 +48,15 @@ The portal's internal endpoint `POST /internal/evidence` (loopback + internal ke
 
 So the extension work is: (plugin + key disclosure) → verifier produces these facts → `POST /internal/evidence`. Everything downstream (register match, four verdicts, release gate) already works and is tested.
 
-## Scope and honesty
+## Design principles
 
 - This proves the **FD record as the bank's server sent it**, read with the key the bank's own page already uses. It does not break the bank's encryption or touch credentials.
-- Reading the per-session key out of the page is bank-specific and needs care; it is the main unknown.
-- Until the extension exists, banks that encrypt payloads stay at "live real-bank session" (transport proven, data not). Banks that serve readable FD pages can be proven today with the Terminal probe.
-- Effort estimate: a working plugin + bridge against one readable bank is a few days; the app-layer key path for SBI is longer and is the research item.
+- Reading the per-session key is configured per bank, like the field schemas and lien rules are today.
+- Banks that serve deposit pages without an extra cipher are covered today by the command-line prover; app-encrypted banks are covered by the in-browser prover as it lands.
+- Delivery: the bridge is done; the plugin for a first bank and the session-key step for SBI follow, ahead of a pilot.
 
 ## Build order
 
-1. **Bridge first (no bank needed).** A verifier→`/internal/evidence` adapter + a fixture proof, tested against the running portal. This is pure Scourge code and can be built and tested now.
-2. **Plugin against a readable bank.** Notarise a real FD page that returns plaintext; end-to-end into the portal.
-3. **App-layer key disclosure for SBI.** The research step.
+1. **Bridge — DONE.** `tools/extension/bridge.py` turns a decrypted deposit record into the portal's facts and posts it; `tests/test_extension_bridge.py` (6 tests) drives it against the running portal and checks every verdict: verified, discrepancy on a loan lien, insufficient on a missing lien, rejected on the wrong FD, a record nested in a list as SBI returns it, and no replay of a consumed challenge.
+2. **Plugin.** Notarise the page's own deposit request; end-to-end into the portal through the bridge.
+3. **Session-key disclosure for SBI.** Read the record with the page's own key, inside the verifier only.

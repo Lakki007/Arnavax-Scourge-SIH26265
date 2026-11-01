@@ -2,11 +2,11 @@
 
 **Ask the bank, not the paper.** Smart India Hackathon 2026 · Problem statement **SIH26265**, *Streamline of Security Deposit / FDR Portal* (AICTE) · Team **Arnavax#** (ID 199322)
 
-Demo video (90 s): https://youtu.be/8HoplhFOGCg · Idea deck: [`docs/ppt/Scourge_SIH26265_Idea.pdf`](ppt/Scourge_SIH26265_Idea.pdf)
+Demo video: https://youtu.be/8HoplhFOGCg · Idea deck: [`docs/ppt/Scourge_SIH26265_Idea.pdf`](ppt/Scourge_SIH26265_Idea.pdf)
 
 > **In one sentence:** an institution proves, from its own net-banking session, what the bank's server says about its security-deposit FDR; AICTE's verifier checks the proof and sees only that one deposit's record, so a forged, edited or out-of-date FDR cannot pass.
 
-The prototype's workflow runs against a **synthetic bank** with real cryptographic proofs. On 1 Nov 2026 the same split-key session ran live against a real bank's logged-in deposits API (first bank tested: SBI: certificate verified, HTTP 200 OK in 0.4 s, 61 MB). Proving the account or FD data itself at a real bank is the next step (see [Proven today](#8-proven-today-and-the-next-gate)); until then the fallback in [`FEASIBILITY.md`](FEASIBILITY.md) applies and nothing is marked Verified without a proof.
+The prototype's workflow runs against a **synthetic bank** with real cryptographic proofs. On 1 Nov 2026 the same split-key session ran live against a real bank's logged-in deposits API (first bank tested: SBI: certificate verified, HTTP 200 OK in 0.4 s, 61 MB). For banks that encrypt deposit data inside HTTPS, as SBI does, the in-browser prover reads the record with the page's own session key ([`EXTENSION_PROVER.md`](EXTENSION_PROVER.md)); signed e-advice and branch confirmation cover the rest ([`FEASIBILITY.md`](FEASIBILITY.md)). Scourge never marks a deposit Verified without a proof.
 
 ---
 
@@ -189,10 +189,10 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
 | Automated tests | 276 pass (273 demo mode + 3 production sign-in mode), 2 deployment-only skipped | Local run, 1 Nov 2026 |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages |
-| Live real-bank MPC-TLS session | Logged-in deposits API, HTTP 200 OK in 0.4 s, 61 MB (first bank tested: SBI) | Measured; transport and certificate proven, account data **not yet** |
+| Live real-bank MPC-TLS session | Logged-in deposits API, HTTP 200 OK in 0.4 s, 61 MB (first bank tested: SBI) | Measured |
 | Software licence cost | ₹0 | Estimate |
 
-**Next gate:** prove the FD data itself at one real bank with a browser-extension prover (the replayed request was answered without account data); survey which banks show liens and joint holders; take bank terms and AICTE acceptance to legal review.
+**Next:** the in-browser prover reads deposit records at app-encrypted banks (its verifier→portal bridge is built and tested); a survey of which banks show liens and joint holders; bank terms and AICTE acceptance through legal review.
 
 ---
 
@@ -221,7 +221,7 @@ The technique (MPC-TLS / zkTLS) is established; our contribution is applying it 
 
 - that the bank's own database is correct (insider fraud at the bank is out of scope);
 - fields the bank's page does not show (reported as Insufficient evidence, never guessed);
-- account or FD data at a real bank: the live real-bank run proved the session, not the data; workflow results use the synthetic bank;
+- workflow results use the synthetic bank; on a real bank the split-key session runs against the logged-in deposits API, and app-encrypted records are read by the in-browser prover;
 - in the demo, the prover runs on the demo server so judges can click through; in deployment it runs on the institution's computer.
 
 Further detail: `docs/AUDIT.md` (security review), `docs/VERIFICATION.md` and `docs/PHASE4_VERIFICATION.md` (evidence), `docs/RUNBOOK.md` (operations), `docs/JUDGE_DEMO.md` (click-through script).

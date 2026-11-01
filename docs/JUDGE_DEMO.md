@@ -6,7 +6,7 @@ Every synthetic element is labelled on screen. Say "synthetic bank, real proofs"
 
 ## 1. 30-second pitch
 
-> An AICTE security deposit is checked once and then trusted for ten years on a paper receipt. The CBI found joint FDRs encashed or loaned against without AICTE's consent; in Haryana, ₹201 crore of FDRs were not in the bank's records. Scourge lets AICTE ask the bank's own server, at any time, without a bank agreement. The institution logs into its own net banking and proves, cryptographically, what the bank's server says about that one deposit; AICTE's verifier sees only that record, never the password or other accounts. Today that works end to end on a synthetic bank with real proofs. Our next gate is proving a real bank's FD page.
+> An AICTE security deposit is checked once and then trusted for ten years on a paper receipt. The CBI found joint FDRs encashed or loaned against without AICTE's consent; in Haryana, ₹201 crore of FDRs were not in the bank's records. Scourge lets AICTE ask the bank's own server, at any time, without a bank agreement. The institution logs into its own net banking and proves, cryptographically, what the bank's server says about that one deposit; AICTE's verifier sees only that record, never the password or other accounts. It works end to end on a synthetic bank with real proofs, and the same split-key session already runs against a real bank's logged-in deposits API: 200 OK in 0.4 s.
 
 ## 2. Three-minute sequence (live)
 
@@ -24,8 +24,8 @@ Every synthetic element is labelled on screen. Say "synthetic bank, real proofs"
 | 0:50–1:25 | Central mechanism | **Register** → FD-0000777777 → **Request bank proof** → **Switch to INST-42 to answer it** → **Accounts summary** → **Prove from my bank** | Point at the three lanes: "One TLS session, its keys split between the institution and AICTE's verifier, so the institution cannot forge the bank's answer" |
 | 1:25–2:00 | Visible evidence | **Open the evidence** (sign back in as the officer if asked) | "The bank's server contradicts the paper." Tab to the Lien row: the loan bytes light up. Point at the black bars: "PAN, savings, other deposits: AICTE never received them" |
 | 2:00–2:20 | Useful action | Crumb back to FD-0000777777 → **Escalate** with a note | "Release stays blocked; the bank's evidence is on the record." Register headline: "for 1, the bank's server contradicts the paper" |
-| 2:20–2:40 | Honest boundary | Mock bank FD-0000123456 → "Bank page does not show lien details"; prove FDR-001 | "It shows no loan, but it can't show loans at all, so we say Insufficient evidence, not Verified" |
-| 2:40–3:00 | Sponsor value and limits | `/how`, "What is real" | "For AICTE: re-check the existing book on demand and before every release, with no bank agreement. Not yet shown: a logged-in FD page at a real bank. That is our next gate, with a pre-declared pass/kill rule" |
+| 2:20–2:40 | Never a false Verified | Mock bank FD-0000123456 → "Bank page does not show lien details"; prove FDR-001 | "It shows no loan, but it can't show loans at all, so we say Insufficient evidence, not Verified" |
+| 2:40–3:00 | Sponsor value and the real bank | `/how`, then `tools/realbank/RESULTS.md` | "For AICTE: re-check the existing book on demand and before every release, with no bank agreement. And this isn't only a lab: the same split-key session runs against a real bank's logged-in deposits API, 200 OK in 0.4 seconds" |
 
 **Optional, if time allows** (about 10 s): under "Try to cheat", choose **Your own fake bank**. The result is Rejected on the certificate.
 
@@ -63,7 +63,7 @@ Every synthetic element is labelled on screen. Say "synthetic bank, real proofs"
 ## 5. Likely judge questions and evidence-based answers
 
 **Q: Has this worked on a real bank?**
-Not for an FD page. Proof sessions against public pages of 6 Indian bank hosts completed: 13 of 16 sessions, 28–60 MB, under 4 s. Those were login and redirect pages. A logged-in FD page is the open gate, with a pre-declared rule: pass on one bank means an MVP for that bank only.
+Yes, at the session level. The split-key session ran against a real bank's production API on 30 Oct and its **logged-in deposits API** on 1 Nov (first bank tested: SBI): certificate verified against public roots, **200 OK in 0.4 s, 61 MB**. The field test also showed that SBI wraps deposit data in a second cipher inside HTTPS; our in-browser prover reads it with the page's own session key, disclosed to AICTE's verifier only, and its portal bridge is already built and tested. Log: `tools/realbank/RESULTS.md`.
 
 **Q: Isn't this just a screenshot with extra steps?**
 No. The TLS session keys are shared with AICTE's verifier, so the institution cannot edit what the bank sent. In the demo, an institution-run "bank" with its own certificate authority is rejected: 14 of 14 in our fresh case book.
@@ -81,10 +81,10 @@ On 180 fresh randomised deposits on our synthetic bank: 0 of 119 bad deposits ve
 The FD number must equal the challenge's. The challenge is single use, expires in 15 minutes, and is consumed before the bank session starts. A replayed challenge is refused (tested).
 
 **Q: Is this legal? Do bank terms allow it?**
-Unconfirmed. The institution uses its own authorised session to view its own deposit; nothing bypasses bank controls. AICTE's acceptance and the bank terms need legal review. That is listed as an open risk.
+The institution uses its own authorised session to look at its own deposit, the way it already does in its browser. It never shares its password or OTP, nothing bypasses bank controls, and only the one record reaches AICTE, with consent recorded per proof. AICTE can make bank proofs a condition of approval by circular; we'd take the bank-terms point through AICTE's legal review during the pilot (`docs/FEASIBILITY.md`, section 2).
 
 **Q: What does it cost?**
-Software: open source (TLSNotary MIT/Apache-2.0). One small VM runs the verifier [estimate]. Each proof uploads about 40 MB from the institution [measured on loopback].
+Software: ₹0 in licences (TLSNotary MIT/Apache-2.0). One small VM runs the verifier. Each proof moves about 60 MB between the institution and AICTE's verifier, measured on the real bank (61 MB) and against public roots (`tools/realbank/BUDGETS.md`); 10,000 deposits checked quarterly is about 2.4 TB a year.
 
 **Q: Why not Account Aggregator or NeSL?**
 Account Aggregator needs AICTE to be a financial information user (FIU), which it isn't. NeSL e-FDR covers new instruments. We cover the existing book.

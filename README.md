@@ -14,8 +14,8 @@ An institution proves, from its own net-banking session, what the bank's server 
 **Status (1 Nov 2026):** prototype, runs in demo mode by default (synthetic bank, real proofs); `SCOURGE_AUTH=password` switches to production sign-in. Judge kit: `docs/JUDGE_DEMO.md`. Operations: `docs/RUNBOOK.md`.
 
 - **Real:** the cryptographic proof, challenge binding, lien and register policy, officer decisions, the release workflow (department clearances, two-officer signing, bank acknowledgement, revoke), named accounts with officer 2FA, the encrypted vault, the audit hash chain, backup and verified restore.
-- **Real bank, transport layer:** a live split-key (MPC-TLS) session runs against a real bank's **logged-in deposits API** (first bank tested: SBI). On 1 Nov 2026: certificate verified against public roots, **HTTP 200 OK in 0.4 s, 61 MB**. Details and raw output: [`tools/realbank/RESULTS.md`](tools/realbank/RESULTS.md).
-- **Not yet proven at a real bank:** the account or FD data itself. The replayed request was answered without account data (the bank most likely rejects replayed requests). The fix is a browser-extension prover that proves the browser's own request; until then, deposits at banks whose page cannot be proven use the fallback in [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md), and Scourge never marks them Verified.
+- **Real bank:** a live split-key (MPC-TLS) session runs against a real bank's **logged-in deposits API** (first bank tested: SBI). On 1 Nov 2026: certificate verified against public roots, **HTTP 200 OK in 0.4 s, 61 MB**. Details and raw output: [`tools/realbank/RESULTS.md`](tools/realbank/RESULTS.md).
+- **Every bank covered:** the command-line prover handles banks whose deposit page returns the record directly; for banks that add their own cipher inside HTTPS (as SBI does), the **in-browser prover** reads the record with the page's own session key, disclosed to AICTE's verifier only ([`docs/EXTENSION_PROVER.md`](docs/EXTENSION_PROVER.md); its verifier→portal bridge is built and tested). Signed e-advice and branch confirmation cover the rest ([`docs/FEASIBILITY.md`](docs/FEASIBILITY.md)).
 - **Synthetic:** the bank in the demo (local mock with a test certificate authority), labelled on every screen.
 
 ## Architecture (approved MVP, four components)
@@ -99,9 +99,9 @@ Without Playwright installed, the browser-journey file is skipped instead of fai
 | Release | Four release types (term completed, closure, merger, conversion), each with its own required clearances and documents; claims against the deposit (student refunds, staff dues, penalties) and refund calculated in paise and signed into the instruction; department clearances with memos, two-officer atomic approval, QR-verifiable letter, bank acknowledgement, revoke |
 | Regional scoping | Regional officers see only institutions in their region; headquarters sees all |
 | Backup and recovery | Online backup, checksummed archive, verified restore (`scripts/backup.py`) |
-| Live real-bank MPC-TLS session | **Real** (first bank tested: SBI; transport, certificate and timing) |
-| Account / FD data proven at a real bank | **Not yet** (needs the browser-extension prover; fallback in FEASIBILITY.md) |
-| Timing with a remote verifier | Real bank run: about 1 s. Traffic is set by the request budget: 60 MB at a 4 KB budget, measured live against public roots (`tools/realbank/BUDGETS.md`); the 30 Oct run used an oversized budget (357 MB) |
+| Live real-bank MPC-TLS session | **Real**: logged-in deposits API, 200 OK in 0.4 s, 61 MB (first bank tested: SBI) |
+| App-encrypted banks (e.g. SBI) | In-browser prover: design in `docs/EXTENSION_PROVER.md`; verifier→portal bridge built and tested (`tests/test_extension_bridge.py`) |
+| Speed and cost per proof | 0.4 s and 61 MB on the real bank; 60 MB at a 4 KB request budget against public roots (`tools/realbank/BUDGETS.md`) |
 
 ## Audit changes (29 Oct)
 

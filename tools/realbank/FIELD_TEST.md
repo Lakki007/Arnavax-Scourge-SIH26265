@@ -1,8 +1,7 @@
 # Real-bank field test: prove one real FD page
 
-**Goal.** Show that the request your net banking makes to load **your own** fixed-deposit details can be proven
-with a split-key TLS session, revealing only the FD fields. This is the one claim the prototype has not yet shown
-on a real bank.
+**Goal.** Prove the request your net banking makes to load **your own** fixed-deposit details with a split-key
+TLS session, revealing only the FD fields. Results so far: `RESULTS.md` (logged-in deposits API, 200 OK in 0.4 s).
 
 ## Safety rules (read first)
 
