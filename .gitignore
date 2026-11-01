@@ -14,3 +14,5 @@ tools/realbank/headers.txt
 tools/realbank/body.txt
 .DS_Store
 backups/
+tools/realbank/body.txt
+tools/realbank/run.env
