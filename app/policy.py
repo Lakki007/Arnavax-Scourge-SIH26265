@@ -19,15 +19,47 @@ _MONEY = re.compile(r"^(?:₹|RS\.?|INR)?\s*(\d{1,3}(?:,\d{2,3})*|\d+)(\.\d{1,2}
 
 
 def money(s):
-    """'2500000.00', '₹25,00,000.00', 'Rs. 25,00,000.00', 'INR 2,500,000', '25,00,000/-'.
-    'Cr'/'Dr' suffixes, a sign, words ('Lakh') or anything else -> None."""
+    """Amount in integer PAISE (exact; no floating point). '2500000.00', '₹25,00,000.00', 'Rs. 25,00,000.00',
+    'INR 2,500,000', '25,00,000/-'. 'Cr'/'Dr' suffixes, a sign, words ('Lakh') or anything else -> None."""
     if s is None:
         return None
     t = " ".join(str(s).strip().upper().split())
     m = _MONEY.match(t)
     if not m:
         return None
-    return float(m.group(1).replace(",", "") + (m.group(2) or ""))
+    frac = (m.group(2) or ".")[1:].ljust(2, "0")
+    return int(m.group(1).replace(",", "")) * 100 + int(frac)
+
+
+_NEGATION = re.compile(r"\b(NO|NOT|NIL|NONE|REMOVED|RELEASED|REVOKED|CANCELL?ED|WITHDRAWN|LIFTED|MARKED OFF|EXPIRED|DELETED|DISCHARGED)\b")
+
+
+def _norm(s):
+    return " ".join(str(s).upper().split())
+
+
+def read_lien(text, rules):
+    """Deterministic, bank-specific reading of the lien field. Returns (result, note):
+    'match' only for an exact listed 'in favour of AICTE' value; 'encumbrance' / 'no_lien' only for listed meanings;
+    everything else 'unrecognised' (unknown: never a confirmation, never an accusation)."""
+    if not rules:
+        return "unrecognised", "this bank has no lien schema: unknown"
+    u = _norm(text)
+    if u in {_norm(v) for v in rules.get("in_favour_of_aicte", [])}:
+        return "match", ""
+    if any(re.fullmatch(pat, u) for pat in rules.get("encumbrance_patterns", [])):
+        return "encumbrance", "the bank shows a loan or other encumbrance on the deposit"
+    if u in {_norm(v) for v in rules.get("no_lien_values", [])}:
+        return "no_lien", "the bank shows no lien in favour of AICTE"
+    if _NEGATION.search(u):
+        return "unrecognised", "the wording negates or removes a lien but is not in this bank's schema: unknown, never a confirmation"
+    return "unrecognised", "lien wording not in this bank's schema: unknown, never a confirmation"
+
+
+def holder_ok(text, need):
+    """The required holder must be one of the listed holders, compared whole (not a substring)."""
+    parts = {_norm(p) for p in re.split(r"[/,;&]|\bAND\b", str(text)) if p.strip()}
+    return _norm(need) in parts
 
 
 _FULL = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"]
@@ -100,7 +132,7 @@ def apply(facts: dict, fdr: dict):
             put("balance", "unparseable", fdr["principal"], "balance could not be read as a number")
             insufficient = insufficient or "balance" in required
         else:
-            ok = b + 0.005 >= p
+            ok = b >= p
             put("balance", "match" if ok else "mismatch", fdr["principal"],
                 "at least the registered principal" if ok else "below the registered principal", not ok)
     if "principal" in proven:
@@ -108,7 +140,7 @@ def apply(facts: dict, fdr: dict):
         if a is None or b is None:
             put("principal", "unparseable", fdr["principal"])
         else:
-            ok = abs(a - b) < 0.005
+            ok = a == b
             put("principal", "match" if ok else "mismatch", fdr["principal"], "", not ok)
     if "maturity" in proven:
         a, b = norm_date(proven["maturity"]), norm_date(fdr["maturity"])
@@ -117,18 +149,18 @@ def apply(facts: dict, fdr: dict):
             insufficient = insufficient or "maturity" in required
         else:
             put("maturity", "match" if a == b else "mismatch", fdr["maturity"], "" if a == b else "maturity differs from the register", a != b)
-    need = schema.get("holder_must_contain")
+    need = schema.get("holder_required")
     if "holders" in proven and need:
-        ok = need.upper() in proven["holders"].upper()
-        put("holders", "match" if ok else "mismatch", f"includes {need}", "" if ok else f"{need} is not a holder", not ok)
+        ok = holder_ok(proven["holders"], need)
+        put("holders", "match" if ok else "mismatch", f"includes {need}", "" if ok else f"{need} is not listed as a holder", not ok)
     if "lien" in proven:
-        u = proven["lien"].upper()
-        if any(x.upper() in u for x in schema.get("lien_bad_contains", [])):
-            put("lien", "mismatch", "lien in favour of AICTE", "the bank shows a loan or other encumbrance", True)
-        elif any(x.upper() in u for x in schema.get("lien_ok_contains", [])):
+        r, note = read_lien(proven["lien"], schema.get("lien_rules"))
+        if r == "match":
             put("lien", "match", "lien in favour of AICTE", "")
+        elif r in ("encumbrance", "no_lien"):
+            put("lien", "mismatch", "lien in favour of AICTE", note, True)
         else:
-            put("lien", "unrecognised", "lien in favour of AICTE", "lien text not recognised by the bank schema")
+            put("lien", "unrecognised", "lien in favour of AICTE", note)
             insufficient = insufficient or "lien" in required
     for k, v in fields.items():
         if k not in match:

@@ -1,0 +1,7 @@
+{
+  "_note": "Synthetic addresses for the demo (.test never resolves). In deployment these come from AICTE's institution and staff directory.",
+  "institution": {"INST-42": "registrar@inst42.example.test", "INST-77": "registrar@inst77.example.test"},
+  "officer": "rb-scrutiny@aicte.example.test",
+  "regional_head": "regional-head@aicte.example.test",
+  "authority": "member-secretary@aicte.example.test"
+}

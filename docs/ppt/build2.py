@@ -196,17 +196,17 @@ for q, (lab, val) in zip(paras, vals):
 s2 = S[1]; frame(s2)
 title(s2, [("SCOURGE ", VIO), ("— ASK THE BANK, NOT THE PAPER", INK)], 28)
 pointer(s2, L, 1.22, 7.2, "Proposed Solution (Describe your Idea/Solution/Prototype)")
-tx(s2, L, 1.62, 7.1, 0.62, [[("An institution proves what its ", {"s": 15, "f": H, "b": True}),
-   ("bank's own server", {"s": 15, "f": H, "b": True, "c": VIO}),
-   (" says about one FDR. AICTE sees ", {"s": 15, "f": H, "b": True}),
-   ("only that record.", {"s": 15, "f": H, "b": True, "c": VIO})]], lsp=1.0)
+tx(s2, L, 1.58, 7.1, 0.7, [[("The ", {"s": 14.5, "f": H, "b": True}),
+   ("bank's own website", {"s": 14.5, "f": H, "b": True, "c": VIO}),
+   (" proves the FDR: no bank API, no agreement, no paper. AICTE sees ", {"s": 14.5, "f": H, "b": True}),
+   ("only that record.", {"s": 14.5, "f": H, "b": True, "c": VIO})]], lsp=1.0)
 blocks = [
     ("FaKey", VIO, "Detailed explanation of the proposed solution",
-     [[("AICTE sends a ", {}), ("single-use challenge", {"b": True}), (" for one FDR. The institution logs into its own net banking inside one TLS session whose keys are ", {}), ("split with AICTE's verifier", {"b": True}), (" (MPC-TLS). Password, OTP, PAN and other accounts never leave the institution.", {})]]),
+     [[("AICTE sends a ", {}), ("single-use challenge", {"b": True}), (" for one FDR. The institution opens its own net banking; the connection key is ", {}), ("split with AICTE's verifier", {"b": True}), (" (MPC-TLS), so nobody can fake the page. Login, OTP and PAN stay with the institution.", {})]]),
     ("FaMagnifyingGlass", MINT, "How it addresses the problem",
      [[("Paper is checked once and trusted for 10 years. Scourge ", {}), ("re-checks the bank any time and before every release", {"b": True}), (": a loan, early encashment, missing pledge (lien) or fake FDR shows up as a ", {}), ("Discrepancy", {"b": True, "c": CORAL_D}), (".", {})]]),
     ("FaShieldHalved", CORAL, "Innovation and uniqueness of the solution",
-     [[("Works on every bank's existing net-banking page, and API-ready", {"b": True}), (". Three evidence tiers: bank-session proof, then bank-signed e-advice, then branch confirmation. Split key: the institution cannot edit what the bank said; fakes and replays are rejected.", {})]]),
+     [[("Works with banks' existing net banking", {"b": True}), (": no bank API or agreement needed, and API-ready when banks offer one. If a page cannot show a field: bank-signed e-advice, then branch confirmation. Fakes and replays are rejected.", {})]]),
 ]
 y = 2.32
 for ic, col, head, body in blocks:
@@ -232,7 +232,7 @@ life = [("1  FILE", VIO, "Institution files online; renewals linked"),
         ("2  PROVE", SKY, "Bank-session proof on AICTE's challenge"),
         ("3  MONITOR", AMBER, "T-90/60/30/7 alerts; adequacy; MT940/camt.053 reconcile"),
         ("4  DECIDE", CORAL, "Verdict + evidence; hash-chained audit"),
-        ("5  PLEDGE RELEASE", MINT, "Dept clearances, 2 signers, holds; QR-signed letter")]
+        ("5  PLEDGE RELEASE", MINT, "Dept reviewers, 2 signers, holds; signed letter → bank ack")]
 lw5 = (CW - 4 * 0.22) / 5
 for i, (h_, col, t_) in enumerate(life):
     x = L + i * (lw5 + 0.22)
@@ -254,16 +254,18 @@ pointer(s3, L, 1.22, 8, "Technologies to be used")
 stack = [("FaFingerprint", VIO, "Proof layer", "TLSNotary MPC-TLS · Rust", "Selective disclosure · rustls"),
          ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "AES-GCM vault · hash-chained audit"),
          ("FaCode", MINT, "Frontend", "Server-rendered HTML · JS", "Live 3-party proof view"),
-         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "181 tests · 2FA · audits")]
+         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "254 tests · 2FA · audits")]
 cw4 = (CW - 3 * 0.2) / 4
 for i, (ic, col, head, l1, l2) in enumerate(stack):
     x = L + i * (cw4 + 0.2)
-    rect(s3, x, 1.65, cw4, 1.0, fill=SOFT, line=LINE, r=0.12)
-    icon(s3, ic, x + 0.18, 1.86, 0.56, col)
-    tx(s3, x + 0.88, 1.74, cw4 - 0.98, 0.84, [[(head, {"f": H, "b": True, "s": 12, "c": INK, "after": 2})],
+    rect(s3, x, 1.62, cw4, 0.92, fill=SOFT, line=LINE, r=0.12)
+    icon(s3, ic, x + 0.18, 1.8, 0.56, col)
+    tx(s3, x + 0.88, 1.66, cw4 - 0.98, 0.84, [[(head, {"f": H, "b": True, "s": 12, "c": INK, "after": 2})],
                                             [(l1, {"s": 9.5, "c": GREY})], [(l2, {"s": 9.5, "c": GREY})]], anchor=MSO_ANCHOR.MIDDLE)
 
-pointer(s3, L, 2.85, 8.4, "Methodology and process for implementation (Flow Charts/Images/ working prototype)")
+pointer(s3, L, 2.64, 8.4, "Methodology and process for implementation (Flow Charts/Images/ working prototype)")
+tx(s3, L + 0.2, 2.95, 8.3, 0.3, [[("In plain words: ", {"b": True, "s": 10.5, "c": VIO}),
+   ("an AICTE \"notary\" watches the bank page load, sees only the FD line, and nobody can change it.", {"s": 10.5, "i": True, "c": INK})]], anchor=MSO_ANCHOR.MIDDLE)
 # native three-party sequence diagram
 dx, dw = L, 8.3
 rect(s3, dx, 3.27, dw, 3.5, fill=SOFT, line=LINE, r=0.05)
@@ -301,7 +303,7 @@ for lab, col in [("Verified", MINT), ("Discrepancy", CORAL), ("Insufficient evid
 # hero: video card
 vx, vy, vw, vh = 9.05, 2.85, R - 9.05, 3.92
 rect(s3, vx, vy, vw, vh, fill=INK, r=0.06)
-tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE DEMO (100 s)", {"f": H, "b": True, "s": 11, "c": MINT})]])
+tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE 3-MINUTE DEMO", {"f": H, "b": True, "s": 11, "c": MINT})]])
 mw = vw - 0.5; mh = mw * 9 / 16
 mv = s3.shapes.add_movie(VIDEO, Inches(vx + 0.25), Inches(vy + 0.6), Inches(mw), Inches(mh), poster_frame_image=POSTER, mime_type="video/mp4")
 mv.name = "Demo video"
@@ -309,15 +311,15 @@ qy = vy + 0.6 + mh + 0.2
 qr = rect(s3, vx + 0.25, qy, 1.05, 1.05, fill=WHITE, r=0.08)
 qp = s3.shapes.add_picture(IMG + "qr_dark.png", Inches(vx + 0.3), Inches(qy + 0.05), Inches(0.95), Inches(0.95)); qp.click_action.hyperlink.address = DEMO_HREF
 tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Click to play here, or scan / click the QR for YouTube", {"s": 9.5, "b": True, "c": WHITE, "after": 3})],
-                                        [("Synthetic bank + live SBI session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
+                                        [("Synthetic bank + live real-bank session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 4  FEASIBILITY
 s4 = S[3]; frame(s4)
 title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
-         ("FaGlobe", SKY, "SBI live", "live split-key session, SBI API", "HTTP 200 in 1.0 s · 30 Oct 2026"),
-         ("FaVial", MINT, "181 / 181", "automated tests pass", "incl. attack, forgery, 2FA, vault tests"),
+         ("FaGlobe", SKY, "Real bank", "live split-key session", "HTTP 200 in 1.0 s · first bank: SBI"),
+         ("FaVial", MINT, "254 / 254", "automated tests pass", "incl. lien wording, rollback, forgery tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
@@ -329,16 +331,16 @@ for i, (ic, col, big, lab, note) in enumerate(tiles):
 # live real-bank run (replaces the generic feasibility ticks with evidence)
 rect(s4, L, 3.06, CW, 0.56, fill=INK, r=0.2)
 icon(s4, "FaBuildingColumns", L + 0.14, 3.15, 0.38, MINT, pad=0.22)
-tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("SBI · 30 Oct 2026 · own account", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("First bank tested: SBI · 30 Oct 2026", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":1.0}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
-   [("Split-key session with SBI's production net-banking API; cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+   [("Split-key session with a bank's production net-banking API; cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
 risks = [("Bank page hides liens, or bytes are withheld", "Fallbacks: bank-signed e-advice, then branch confirmation; never a guess"),
          ("Fake bank site or a replayed old proof", "Rejected: bank certificate + single-use, 15-min challenge"),
          ("Proof of a different FD, or an edited screen", "Rejected / no effect: FD bound to challenge; proof covers bank bytes"),
-         ("Bank needs browser-bound session / TLS 1.3", "Browser-extension prover; bank marked unsupported until then")]
+         ("Bank encrypts data inside HTTPS, or ties it to the browser", "Browser-extension prover; verifier gets the per-session app key")]
 ry = 4.13
 for r_, s_ in risks:
     rect(s4, L, ry, 6.1, 0.44, fill=CORAL_T, r=0.3)
@@ -350,8 +352,9 @@ for r_, s_ in risks:
     tx(s4, 7.38, ry, R - 7.48, 0.44, [[(s_, {"s": 10.5, "c": INK})]], anchor=MSO_ANCHOR.MIDDLE)
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
-tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("ROADMAP  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("1 FD-page proof at SBI (live SBI session already done)  →  2 Standard FDR-pledge schema for all banks  →  3 Pilot with an AICTE regional office  →  4 Bank confirmation API as banks onboard; e-BG for new deposits", {"s": 10.5, "c": WHITE})]],
+tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("PILOT PLAN  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
+   ("✓ Prototype, 254 tests  →  ✓ Live real-bank session  →  ", {"s": 10.5, "b": True, "c": MINT}),
+   ("FD pages at 3 large banks  →  1 AICTE regional office  →  National rollout", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 5  IMPACT
@@ -361,7 +364,7 @@ pointer(s5, L, 1.22, 8, "Potential impact on the target audience")
 aud = [("FaUserTie", VIO, "AICTE RB officers", "A dated proof from the bank in seconds, not a letter in weeks"),
        ("FaLandmark", SKY, "AICTE finance", "The whole FDR book is re-checkable, before every release"),
        ("FaSchool", MINT, "Institutions", "One short proof from their own net banking; Hindi or English"),
-       ("FaGraduationCap", AMBER, "Students", "The deposit that protects them is checked across all 10 years")]
+       ("FaGraduationCap", AMBER, "Students", "29.6 lakh enrolled in 2025-26 (Lok Sabha reply); deposits checked all 10 years")]
 for i, (ic, col, who, what) in enumerate(aud):
     x = L + i * (cw4 + 0.2)
     rect(s5, x, 1.65, cw4, 1.15, fill=WHITE, line=LINE, r=0.1, lw=1.25)
@@ -375,7 +378,7 @@ pill(s5, L, 3.42, lw_, 0.36, "TODAY", CORAL, size=10.5, font=H)
 pill(s5, L + lw_ + gap_, 3.42, lw_, 0.36, "WITH SCOURGE", MINT, size=10.5, font=H)
 pairs = [("Branch letter or uploaded screenshot", "The bank's own server, proven"),
          ("Checked once, trusted for 10 years", "Re-checked any time, before every release"),
-         ("Weeks per confirmation", "Under a second per proof (synthetic bank)"),
+         ("Weeks per confirmation", "0.58 s per proof (synthetic); 1.0 s live bank session"),
          ("Hidden loans found at release, or never", "Pledge checked at the bank; two-officer release")]
 py = 3.88
 for a_, b2 in pairs:
@@ -402,7 +405,7 @@ for big, lab, col in res:
 ben = [("FaPeopleGroup", MINT, "Social", "students' deposits stay intact"),
        ("FaCoins", SKY, "Economic", "stops loss before release"),
        ("FaLeaf", RGBColor(0x16, 0xA3, 0x4A), "Environmental", "no paper letters or couriers"),
-       ("FaScaleBalanced", VIO, "Governance", "2FA, encrypted vault, chained audit")]
+       ("FaScaleBalanced", VIO, "Governance", "accounts, 2FA, vault, chained audit")]
 bw = (CW - 3 * 0.2) / 4
 for i, (ic, col, h_, t_) in enumerate(ben):
     x = L + i * (bw + 0.2)
@@ -439,7 +442,7 @@ q = rect(s6, L + 0.2, 5.55, 1.08, 1.08, fill=WHITE, r=0.08)
 qp6 = s6.shapes.add_picture(IMG + "qr_dark.png", Inches(L + 0.25), Inches(5.6), Inches(0.98), Inches(0.98)); qp6.click_action.hyperlink.address = DEMO_HREF
 tx(s6, L + 1.45, 5.5, 4.7, 1.2, [[("PROJECT RESOURCES", {"f": H, "b": True, "s": 11, "c": MINT, "after": 3})],
    [("Demo video (90 s): ", {"b": True, "s": 9.5, "c": WHITE}), (DEMO_URL, {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
-   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 181 / 181 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
+   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 254 / 254 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
    [("Code + evidence: ", {"b": True, "s": 9.5, "c": WHITE}), ("github.com/Lakki007/Arnavax-Scourge-SIH26265", {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # comparison table (hero)
@@ -471,12 +474,12 @@ for i, (f_, vals) in enumerate(feat, 1):
     cell(tb_.cell(i, 0), f_, SOFT, INK, 9, align=PP_ALIGN.LEFT)
     for j, v in enumerate(vals, 1):
         if v == "n":
-            cell(tb_.cell(i, j), "SBI session; FD next", VIO_T, VIO, 8)
+            cell(tb_.cell(i, j), "Live bank session; FD next", VIO_T, VIO, 8)
         else:
             cell(tb_.cell(i, j), v, VIO_T if j == 5 else WHITE, MINT if v == "✓" else CORAL if v == "✕" else AMBER, 15)
     tb_.rows[i].height = Inches(0.62)
 tb_.rows[0].height = Inches(0.62)
-tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with SBI's API done (30 Oct 2026); FD-page proof is roadmap step 1.", {"s": 9.5, "i": True, "c": GREY})]])
+tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with a real bank done (SBI, 30 Oct 2026); FD-page proof is roadmap step 1.", {"s": 9.5, "i": True, "c": GREY})]])
 
 for sl in prs.slides:
     for sh in sl.shapes:

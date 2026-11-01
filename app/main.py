@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse, HTMLResponse, JSONResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, eadvice, i18n, jobs, lifecycle, policy, procs, reports, seed, totp, vault, views
+from . import accounts, auth, db, eadvice, i18n, jobs, lifecycle, mailer, policy, procs, reports, seed, totp, vault, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
 HERE = Path(__file__).parent
@@ -52,7 +52,7 @@ def ago(t):
     return f"{int(d // 86400)} days ago"
 
 
-T.env.globals.update(VAULT_KINDS=vault.KINDS, DEPTS=lifecycle.RULES['release']['departments'], inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
+T.env.globals.update(OFFICER_DEPT=auth.OFFICER_DEPT, OFFICERS=auth.OFFICERS, VAULT_KINDS=vault.KINDS, DEPTS=lifecycle.RULES['release']['departments'], inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
 T.env.filters["fromjson"] = json.loads
 
 
@@ -92,19 +92,39 @@ def fdr_bundle(fid, _depth=0):
             st = ("renewed", "Renewed", f"into {succ['id']}, confirmed by the bank")
     if st == base and rel and base[0] == "confirmed":
         st = ("release_pending", "Release proposed", f"by {rel['proposed_by']}; needs a second officer")
+    issued = db.q1("SELECT * FROM release_requests WHERE fdr_id=? AND state='approved' ORDER BY id DESC", (fid,)) if not f["released_at"] else None
+    if issued and st[0] != "renewed":
+        if base[0] == "discrepancy":
+            st = ("discrepancy", "Discrepancy after instruction", f"new bank evidence contradicts the issued release {issued['letter_no']}: review before completion")
+        else:
+            st = ("instruction_issued", "Release instruction issued", f"{issued['letter_no']}: awaiting the bank's acknowledgement")
     hold = db.q1("SELECT * FROM holds WHERE fdr_id=? AND lifted_at IS NULL ORDER BY id DESC", (fid,))
     if hold and base[0] != "released" and st[0] != "renewed":
         st = ("on_hold", "On hold", hold["reason"][:80])
-    b = {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st, "base_status": base,
+    b = {"f": f, "evidence": ev, "actions": acts, "open": openc, "status": st, "base_status": base, "issued": issued,
          "release_request": rel, "predecessor": pred, "successor": succ, "hold": hold}
     if rel:
         b["clearances"] = {c["dept"]: c for c in db.q("SELECT * FROM release_clearances WHERE release_id=?", (rel["id"],))}
-        b["approvals"] = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
+        b["release_fp"] = release_fingerprint(f, rel, b["clearances"], hold)
+        allapp = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
+        b["approvals"] = [a for a in allapp if a.get("fp") in (None, b["release_fp"])]
+        b["stale_approvals"] = [a for a in allapp if a.get("fp") not in (None, b["release_fp"])]
+        b["release_version"] = f"{b['release_fp']}:{len(b['approvals'])}"
         b["signers_needed"] = 2 if float(f["principal"]) >= lifecycle.RULES["release"]["second_signer_from_rupees"] else 1
     b["eadvice"] = eadvice_state(b)
     b["branch"] = db.q1("SELECT * FROM branch_requests WHERE fdr_id=? ORDER BY created_at DESC", (fid,))
     b["documents"] = db.q("SELECT id, kind, filename, mime, size, sha256, uploaded_by, uploaded_at FROM documents WHERE fdr_id=? ORDER BY id DESC", (fid,))
     return b
+
+
+def release_fingerprint(f, rel, clearances, hold):
+    """What an approving officer signed off on. If any of it changes afterwards (bank evidence, clearances,
+    documents, hold, principal), earlier signatures no longer count and must be given again."""
+    docs = db.q("SELECT id, sha256 FROM documents WHERE fdr_id=? ORDER BY id", (f["id"],))
+    material = {"evidence": rel["evidence_id"], "principal": f["principal"], "hold": hold["id"] if hold else None,
+                "clearances": sorted((d, c["decision"]) for d, c in clearances.items()),
+                "documents": [(d["id"], d["sha256"]) for d in docs]}
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
 def eadvice_state(b):
@@ -238,11 +258,51 @@ def find(request: Request, fd: str = ""):
 @app.get("/signin", response_class=HTMLResponse)
 def signin_page(request: Request, next: str = "/"):
     return render(request, "signin.html", institutions=db.q("SELECT * FROM institutions ORDER BY id"), next=next if next.startswith("/") and not next.startswith("//") else "/",
-                  access_required=bool(ACCESS_CODE))
+                  access_required=bool(ACCESS_CODE), picker=accounts.role_picker_allowed(), demo_accounts=seed.DEMO_ACCOUNTS if accounts.role_picker_allowed() else [])
+
+
+def _safe_next(next, dest):
+    return next if next and next.startswith("/") and not next.startswith(("//", "/\\")) and next not in ("/", "/signin") else dest
+
+
+@app.post("/signin/password")
+def signin_password(request: Request, username: str = Form(""), password: str = Form(""), otp: str = Form(""), next: str = Form("/")):
+    """Named-account sign-in (scrypt passwords, lockout, TOTP for officers). The only sign-in in SCOURGE_AUTH=password mode."""
+    user = username.strip().lower()[:40]
+    if db.q1("SELECT COUNT(*) AS n FROM login_failures WHERE who=? AND at>?", ("acct:" + user, time.time() - LOCKOUT_SECONDS))["n"] >= LOCKOUT_FAILURES:
+        db.event("anonymous", "signin_locked", username=user)
+        raise HTTPException(429, "Too many failed attempts for this account. Sign-in is locked for 15 minutes.")
+    a = accounts.verify(user, password[:200])
+
+    def fail(msg, kind="signin_password_failed"):
+        db.x("INSERT INTO login_failures(who,at) VALUES(?,?)", ("acct:" + user, time.time()))
+        db.event("anonymous", kind, username=user)
+        time.sleep(0.3)
+        raise HTTPException(403, msg)
+    if not a:
+        fail("Wrong user name or password.")
+    if a["role"] == "officer":
+        mfa = db.q1("SELECT * FROM officer_mfa WHERE officer=? AND enabled=1", (a["officer"],))
+        if MFA_REQUIRED and not mfa:
+            raise HTTPException(403, "Two-factor sign-in is required for officers. Ask the administrator to enrol your authenticator.")
+        if mfa:
+            st = totp.verify(mfa["secret"], otp, mfa["last_step"])
+            if st is None:
+                fail(f"Enter the current 6-digit code from your authenticator app.", "signin_otp_failed")
+            db.x("UPDATE officer_mfa SET last_step=? WHERE officer=?", (st, a["officer"]))
+        cookie, dest = auth.make_cookie("officer", None, a["officer"]), "/register"
+    else:
+        cookie, dest = auth.make_cookie("institution", a["institution_id"]), "/portal"
+    r = RedirectResponse(_safe_next(next, dest), 303)
+    r.set_cookie(auth.COOKIE, cookie, httponly=True, samesite="lax", max_age=auth.MAX_AGE, secure=COOKIE_SECURE)
+    db.event(f"officer:{a['officer']}" if a["role"] == "officer" else f"institution:{a['institution_id']}", "signed_in", username=user, method="password")
+    return r
 
 
 @app.post("/signin")
 def signin(request: Request, role: str = Form(...), next: str = Form("/"), access_code: str = Form(""), otp: str = Form("")):
+    if not accounts.role_picker_allowed():
+        raise HTTPException(403, "Demo role selection is switched off. Sign in with your own account.")
     # The code gates entry. Someone already signed in may switch demo roles (the officer's
     # "Switch to INST-42 to answer it" step) without typing it again.
     if ACCESS_CODE and not auth.read(request) and not hmac.compare_digest(access_code.encode(), ACCESS_CODE.encode()):
@@ -504,6 +564,8 @@ def action_gates(b):
         g["release"] = (False, f"On hold: {b['hold']['reason']}. Lift the hold first.")
     elif rel:
         g["release"] = (False, f"A release is already proposed by {rel['proposed_by']} and awaits a second officer.")
+    elif b.get("issued"):
+        g["release"] = (False, f"Instruction {b['issued']['letter_no']} is already issued and awaits the bank's acknowledgement. Revoke it first to issue a replacement.")
     else:
         g["release"] = (True, "")
     # maker-checker: a pending release can be approved only by a different officer, and only while the confirmation is fresh
@@ -568,6 +630,8 @@ def withdraw(request: Request, fid: str, csrf: str = Form("")):
 @app.post("/fdrs/{fid}/decide")
 def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(...), evidence_id: int = Form(...), note: str = Form("")):
     s = officer_post(request, csrf)
+    if auth.officer_id(s) not in auth.PROPOSERS:
+        raise HTTPException(403, "Only the scrutiny officer accepts, escalates or proposes a release.")
     b = get_fdr_or_404(s, fid)
     if action not in ("accept", "escalate", "release"):
         raise HTTPException(400, "Unknown action.")
@@ -596,47 +660,84 @@ def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(
     return RedirectResponse(f"/fdrs/{fid}", 303)
 
 
+FAULTS = set()   # one-shot failure points armed by tests through /internal/fault (loopback + internal key only)
+
+
+def _fault(point):
+    if point in FAULTS:
+        FAULTS.discard(point)
+        raise RuntimeError(f"injected failure at {point}")
+
+
+def release_version(b):
+    """What the approving officer saw: the case fingerprint plus the signatures that count."""
+    return f"{b['release_fp']}:{len(b['approvals'])}"
+
+
 @app.post("/fdrs/{fid}/release/approve")
-def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str = Form(""), otp: str = Form("")):
+def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str = Form(""), otp: str = Form(""), version: str = Form("")):
+    """One all-or-nothing transaction: reload the case, re-check every gate, check the version the officer saw,
+    record the signature, change state if enough valid signatures exist, sign the instruction, write the audit
+    entries. Any failure rolls all of it back."""
     s = officer_post(request, csrf)
+    who = auth.officer_id(s)
+    if who not in auth.APPROVERS:
+        raise HTTPException(403, "Only an approving officer can sign a release (the scrutiny officer proposes; a different officer approves).")
     step_up(s, otp)
-    b = get_fdr_or_404(s, fid)
-    ok, why = action_gates(b)["approve"]
-    if not ok:
-        raise HTTPException(409, why)
-    rel, who, now = b["release_request"], auth.officer_id(s), time.time()
-    if who == rel["proposed_by"]:
-        raise HTTPException(409, "Maker-checker: the officer who proposed a release cannot approve it. Sign in as another officer.")
-    signed_by = [a["officer"] for a in b["approvals"]]
-    if who in signed_by:
-        raise HTTPException(409, "You have already signed this release. A different officer must add the second signature.")
-    if len(signed_by) + 1 < b["signers_needed"]:
-        db.x("INSERT INTO release_approvals(release_id,officer,at) VALUES(?,?,?)", (rel["id"], who, now))
-        db.event(f"officer:{who}", "release_signed", fid, release=rel["id"], signature=len(signed_by) + 1, of=b["signers_needed"])
-        return RedirectResponse(f"/fdrs/{fid}", 303)
-    db.x("INSERT INTO release_approvals(release_id,officer,at) VALUES(?,?,?)", (rel["id"], who, now))
-    approvers = signed_by + [who]
-    letter = f"AICTE/RB/REL/{datetime.utcfromtimestamp(now).year}/{rel['id']:04d}"
-    f = b["f"]
-    signed = {"type": "aicte-pledge-release/v1", "letter_no": letter, "fdr_id": fid, "fd_number": f["fd_number"],
-              "bank_host": f["bank_host"], "institution_id": f["institution_id"], "principal": f["principal"],
-              "proposed_by": rel["proposed_by"], "approved_by": who, "signed_by": approvers,
-              "clearances": sorted(b["clearances"]), "bank_proof_evidence_id": rel["evidence_id"],
-              "approved_at": int(now)}
-    signed_json = json.dumps(signed, sort_keys=True, separators=(",", ":"))
-    signature = base64.b64encode(AICTE_SIGNING_KEY.sign(signed_json.encode())).decode()
+    get_fdr_or_404(s, fid)  # visibility check before taking the write lock
 
     def work(c):
+        b = fdr_bundle(fid)
+        ok, why = action_gates(b)["approve"]
+        if not ok:
+            raise HTTPException(409, why)
+        rel, now = b["release_request"], time.time()
+        if not version or version != release_version(b):
+            raise HTTPException(409, "The case changed after you opened it (new evidence, clearance, document, hold or signature). Reload and review again.")
+        if who == rel["proposed_by"]:
+            raise HTTPException(409, "Maker-checker: the officer who proposed a release cannot approve it. Sign in as another officer.")
+        signed_by = [a["officer"] for a in b["approvals"]]
+        if who in signed_by:
+            raise HTTPException(409, "You have already signed this release. A different officer must add the second signature.")
+        c.execute("INSERT INTO release_approvals(release_id,officer,at,fp) VALUES(?,?,?,?)", (rel["id"], who, now, b["release_fp"]))
+        _fault("after_signature")
+        if len(signed_by) + 1 < b["signers_needed"]:
+            db.event_in(c, f"officer:{who}", "release_signed", fid, release=rel["id"], signature=len(signed_by) + 1, of=b["signers_needed"], fingerprint=b["release_fp"])
+            return False
+        approvers = signed_by + [who]
+        letter = f"AICTE/RB/REL/{datetime.utcfromtimestamp(now).year}/{rel['id']:04d}"
+        f = b["f"]
+        signed = {"type": "aicte-pledge-release/v1", "letter_no": letter, "fdr_id": fid, "fd_number": f["fd_number"],
+                  "bank_host": f["bank_host"], "institution_id": f["institution_id"], "principal": f["principal"],
+                  "proposed_by": rel["proposed_by"], "approved_by": who, "signed_by": approvers,
+                  "clearances": sorted(b["clearances"]), "bank_proof_evidence_id": rel["evidence_id"], "case_fingerprint": b["release_fp"],
+                  "approved_at": int(now)}
+        signed_json = json.dumps(signed, sort_keys=True, separators=(",", ":"))
+        signature = base64.b64encode(AICTE_SIGNING_KEY.sign(signed_json.encode())).decode()
         n = c.execute("UPDATE release_requests SET state='approved', decided_by=?, decided_at=?, decision_note=?, letter_no=?, signed_json=?, signature=? WHERE id=? AND state='pending'",
                       (who, now, note.strip()[:500], letter, signed_json, signature, rel["id"])).rowcount
         if n != 1:
             raise HTTPException(409, "This release was already decided.")
+        _fault("after_state")
         c.execute("INSERT INTO actions(fdr_id,evidence_id,action,note,actor,at) VALUES(?,?,?,?,?,?)",
-                  (fid, rel["evidence_id"], "release", f"{rel['note']} | approved by {who}", f"officer:{who}", now))
-        c.execute("UPDATE fdrs SET released_at=? WHERE id=? AND released_at IS NULL", (now, fid))
-    db.tx(work)
-    db.event(f"officer:{who}", "release_approved", fid, release=rel["id"], proposed_by=rel["proposed_by"], letter=letter, evidence_id=rel["evidence_id"])
-    return RedirectResponse(f"/fdrs/{fid}?released=1", 303)
+                  (fid, rel["evidence_id"], "release", f"{rel['note']} | instruction issued, signed by {', '.join(approvers)}", f"officer:{who}", now))
+        # the deposit is NOT marked released here: that needs the bank's acknowledgement (see /release/complete)
+        _fault("before_audit")
+        db.event_in(c, f"officer:{who}", "release_instruction_issued", fid, release=rel["id"], proposed_by=rel["proposed_by"], letter=letter,
+                    evidence_id=rel["evidence_id"], signed_by=approvers, fingerprint=b["release_fp"])
+        _fault("after_audit")
+        return True
+    issued = db.tx(work)
+    return RedirectResponse(f"/fdrs/{fid}?issued=1" if issued else f"/fdrs/{fid}", 303)
+
+
+@app.post("/internal/fault")
+def arm_fault(request: Request, point: str = Form("")):
+    internal(request)
+    if point not in ("after_signature", "after_state", "before_audit", "after_audit"):
+        raise HTTPException(400, "unknown fault point")
+    FAULTS.add(point)
+    return {"armed": point}
 
 
 @app.post("/fdrs/{fid}/release/reject")
@@ -662,10 +763,10 @@ def release_letter(request: Request, fid: str):
     s = auth.require(request)
     b = get_fdr_or_404(s, fid)
     rel = db.q1("SELECT * FROM release_requests WHERE fdr_id=? AND state='approved' ORDER BY id DESC", (fid,))
-    if not rel or not b["f"]["released_at"]:
+    if not rel:
         raise HTTPException(404, "No approved release for this FDR.")
     e = db.q1("SELECT * FROM evidence WHERE id=?", (rel["evidence_id"],))
-    ev = db.q1("SELECT hash FROM events WHERE kind='release_approved' AND fdr_id=? ORDER BY id DESC", (fid,))
+    ev = db.q1("SELECT hash FROM events WHERE kind='release_instruction_issued' AND fdr_id=? ORDER BY id DESC", (fid,))
     qr_url, qr_svg = letter_qr(request, rel) if rel["signed_json"] else (None, None)
     clear = db.q("SELECT * FROM release_clearances WHERE release_id=? ORDER BY at", (rel["id"],))
     signers = db.q("SELECT * FROM release_approvals WHERE release_id=? ORDER BY at", (rel["id"],))
@@ -696,6 +797,99 @@ def release_letter_json(request: Request, fid: str):
             "algorithm": "Ed25519", "public_key_pem": _aicte_public_pem()}
     return Response(json.dumps(body, indent=2), media_type="application/json",
                     headers={"Content-Disposition": f'attachment; filename="{rel["letter_no"].replace("/", "_")}.json"'})
+
+
+# ----------------------------------------------------------------- release completion (bank acknowledgement)
+@app.post("/fdrs/{fid}/release/complete")
+async def release_complete(request: Request, fid: str):
+    """The pledge is released only when the bank acknowledges executing THIS signed instruction. A completion
+    recorder (not the proposer or a signer) records the acknowledgement, which must name this letter, this FD and
+    this amount, be a new document, and arrive while the approval basis is unchanged. All-or-nothing, once."""
+    s = auth.require(request, "officer")
+    form = await request.form()
+    auth.check_csrf(s, form.get("csrf", ""))
+    who = auth.officer_id(s)
+    if who not in auth.COMPLETERS:
+        raise HTTPException(403, "Only the release completion recorder can record the bank's acknowledgement.")
+    ack = form.get("ack")
+    if ack is None or not getattr(ack, "filename", ""):
+        raise HTTPException(422, "Attach the bank's acknowledgement.")
+    data = await ack.read(vault.MAX_BYTES + 1)
+    try:
+        mime = vault.check(data)
+    except vault.Refused as e:
+        raise HTTPException(422, f"Acknowledgement refused: {e}")
+    ref_letter, ref_fd = (form.get("letter_no") or "").strip(), (form.get("fd_number") or "").strip().upper()
+    ref_amount, bank_ref = policy.money(form.get("amount") or ""), (form.get("bank_ref") or "").strip()
+    if len(bank_ref) < 4:
+        raise HTTPException(422, "Enter the bank's own reference number from the acknowledgement.")
+    sha = hashlib.sha256(data).hexdigest()
+    attested = form.get("attest") == "yes"
+
+    def work(c):
+        b = fdr_bundle(fid)
+        if b["f"]["released_at"]:
+            raise HTTPException(409, "Already completed: the bank's acknowledgement is on record.")
+        rel = b["issued"]
+        if not rel:
+            raise HTTPException(409, "No signed release instruction has been issued for this FDR.")
+        signed = json.loads(rel["signed_json"])
+        if who in signed["signed_by"] or who == signed["proposed_by"]:
+            raise HTTPException(403, "The officer who proposed or signed the release cannot record its completion.")
+        if ref_letter != rel["letter_no"] or ref_fd != b["f"]["fd_number"] or ref_amount != policy.money(b["f"]["principal"]):
+            raise HTTPException(422, "The acknowledgement must name this release letter, this FD number and this amount.")
+        # Does the document itself name this letter, FD and amount? Text PDFs are checked automatically; scans need
+        # the recorder's explicit, audited attestation, and the result is labelled accordingly.
+        text = data.decode("latin-1").upper()
+        amt = policy.money(b["f"]["principal"])
+        amount_forms = {f"{amt // 100}.{amt % 100:02d}", inr(b["f"]["principal"]).replace("₹", "").strip()}
+        named = rel["letter_no"].upper() in text and b["f"]["fd_number"].upper() in text and any(a_ in text for a_ in amount_forms)
+        if not named and not attested:
+            raise HTTPException(422, "The document does not visibly name this letter, FD number and amount. If it is a scan, tick the attestation that you checked it against the bank's original.")
+        how = "document_names_letter_fd_amount" if named else "recorder_attested_manual_review"
+        if c.execute("SELECT 1 FROM documents WHERE sha256=?", (sha,)).fetchone():
+            raise HTTPException(422, "This file is already on record (an old receipt or an earlier document cannot be reused as the acknowledgement).")
+        # new adverse bank evidence after the release was approved blocks completion (re-read inside this transaction)
+        adverse = c.execute("SELECT id, decision FROM evidence WHERE fdr_id=? AND id>? AND decision='discrepancy' ORDER BY id DESC",
+                            (fid, rel["evidence_id"])).fetchone()
+        if adverse:
+            raise HTTPException(409, f"New bank evidence (#{adverse['id']}) contradicts the deposit since the release was approved. Review it; do not complete.")
+        cur_fp = release_fingerprint(b["f"], rel, {x["dept"]: x for x in c.execute("SELECT * FROM release_clearances WHERE release_id=?", (rel["id"],)).fetchall()}, b["hold"])
+        if b["hold"] or cur_fp != signed["case_fingerprint"]:
+            raise HTTPException(409, "The case changed after the instruction was signed (or a hold was placed). It needs fresh review and signatures, not completion.")
+        now = time.time()
+        stored, wk, nonce, _ = vault.seal(fid, data)
+        did = c.execute("INSERT INTO documents(fdr_id,kind,filename,mime,size,sha256,stored_as,wrapped_key,nonce,uploaded_by,uploaded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        (fid, "bank_acknowledgement", re.sub(r"[^\w.\- ]", "_", ack.filename)[:120], mime, len(data), sha, stored, wk, nonce, f"officer:{who}", now)).lastrowid
+        if c.execute("UPDATE fdrs SET released_at=? WHERE id=? AND released_at IS NULL", (now, fid)).rowcount != 1:
+            raise HTTPException(409, "Already completed.")
+        db.event_in(c, f"officer:{who}", "release_completed", fid, release=rel["id"], letter=rel["letter_no"], bank_ref=bank_ref[:60], acknowledgement=did, sha256=sha, evidence_basis=how)
+    db.tx(work)
+    return RedirectResponse(f"/fdrs/{fid}?released=1", 303)
+
+
+@app.post("/fdrs/{fid}/release/revoke")
+def release_revoke(request: Request, fid: str, csrf: str = Form(""), reason: str = Form("")):
+    """Revoke an issued, not-yet-executed instruction (e.g. to supersede it). Approvers only, with a reason; the
+    signed letter stays on record marked revoked, and a fresh proposal can then start."""
+    s = officer_post(request, csrf)
+    who = auth.officer_id(s)
+    if who not in auth.APPROVERS:
+        raise HTTPException(403, "Only an approving officer can revoke a release instruction.")
+    reason = reason.strip()
+    if len(reason) < 10:
+        raise HTTPException(422, "Give a reason of at least 10 characters.")
+    get_fdr_or_404(s, fid)
+
+    def work(c):
+        b = fdr_bundle(fid)
+        rel = b["issued"]
+        if not rel:
+            raise HTTPException(409, "There is no issued, unexecuted instruction to revoke.")
+        c.execute("UPDATE release_requests SET state='revoked', decision_note=? WHERE id=? AND state='approved'", (f"REVOKED by {who}: {reason[:400]}", rel["id"]))
+        db.event_in(c, f"officer:{who}", "release_instruction_revoked", fid, release=rel["id"], letter=rel["letter_no"], reason=reason[:400])
+    db.tx(work)
+    return RedirectResponse(f"/fdrs/{fid}", 303)
 
 
 # ----------------------------------------------------------------- regulatory hold
@@ -1065,21 +1259,27 @@ def mockbank_page(request: Request):
 
 
 @app.post("/mockbank/behaviour")
-def mockbank_set(request: Request, csrf: str = Form(""), fd_number: str = Form(...), behaviour: str = Form(...)):
+def mockbank_set(request: Request, csrf: str = Form(""), fd_number: str = Form(...), behaviour: str = Form(...), lien_text: str = Form("")):
     s = auth.require(request)
     auth.check_csrf(s, csrf)
     if behaviour not in seed.BEHAVIOURS:
         raise HTTPException(400, "Unknown bank behaviour.")
+    lien_text = " ".join(lien_text.split())
+    if behaviour == "custom_lien" and not re.fullmatch(r"[A-Za-z0-9 .,:;()/&@-]{1,80}", lien_text):
+        raise HTTPException(422, "Lien wording: 1-80 letters, digits, spaces and . , : ; ( ) / & @ - only.")
     st = seed.read_bank_state()
     for cid, c in st["customers"].items():
         for d in c["deposits"]:
             if d["fd_number"] == fd_number:
                 if s["role"] == "institution" and cid != s["inst"]:
                     raise HTTPException(403, "Not your deposit.")
-                old, d["behaviour"] = d["behaviour"], behaviour
+                old = d["behaviour"]
+                d["behaviour"] = "active" if behaviour == "custom_lien" else behaviour
+                d["lien"] = lien_text if behaviour == "custom_lien" else seed.DEFAULT_LIEN
+                d["lien_custom"] = behaviour == "custom_lien"
                 seed.write_bank_state(st)
                 fid = (db.q1("SELECT id FROM fdrs WHERE fd_number=?", (fd_number,)) or {}).get("id")
-                db.event(auth.actor(s), "mock_bank_changed", fid, fd_number=fd_number, behaviour=behaviour, previous=old)
+                db.event(auth.actor(s), "mock_bank_changed", fid, fd_number=fd_number, behaviour=behaviour, previous=old, lien_text=lien_text if behaviour == "custom_lien" else None)
                 return RedirectResponse("/mockbank#" + fd_number, 303)
     raise HTTPException(404, "That deposit does not exist at the mock bank.")
 
@@ -1178,7 +1378,8 @@ async def upload_document(request: Request, fid: str, csrf: str = Form(""), kind
         raise HTTPException(422, str(e))
     stored, wk, nonce, sha = vault.seal(fid, data)
     did = db.x("INSERT INTO documents(fdr_id,kind,filename,mime,size,sha256,stored_as,wrapped_key,nonce,uploaded_by,uploaded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-               (fid, kind, re.sub(r"[^\w.\- ]", "_", file.filename)[:120], mime, len(data), sha, stored, wk, nonce, auth.actor(s), time.time()))
+               (fid, kind, re.sub(r"[^\w.\- ]", "_", file.filename)[:120], mime, len(data), sha, stored, wk, nonce,
+                f"officer:{auth.officer_id(s)}" if s["role"] == "officer" else auth.actor(s), time.time()))
     db.event(auth.actor(s), "document_stored", fid, document=did, doc_type=kind, sha256=sha, size=len(data))
     return RedirectResponse(f"/fdrs/{fid}#documents", 303)
 
@@ -1277,7 +1478,7 @@ def branch_confirm_page(request: Request, rid: str, t: str = ""):
 @app.post("/branch/confirm/{rid}", response_class=HTMLResponse)
 def branch_confirm(request: Request, rid: str, t: str = Form(""), code: str = Form(""), status: str = Form(""),
                    balance: str = Form(""), maturity: str = Form(""), holders: str = Form(""), lien: str = Form(""),
-                   officer_name: str = Form("")):
+                   officer_name: str = Form(""), lien_choice: str = Form(""), loan_amount: str = Form("")):
     r = _open_branch_request(rid, t)
     if not hmac.compare_digest(r["code_sha256"], hashlib.sha256(code.strip().encode()).hexdigest()):
         db.x("UPDATE branch_requests SET attempts=attempts+1 WHERE id=?", (rid,))
@@ -1286,6 +1487,20 @@ def branch_confirm(request: Request, rid: str, t: str = Form(""), code: str = Fo
     if len(officer_name.strip()) < 3:
         raise HTTPException(422, "Enter the name and designation of the confirming bank officer.")
     f = db.q1("SELECT * FROM fdrs WHERE id=?", (r["fdr_id"],))
+    # Structured lien answer (explicit choices, mapped to this bank's canonical wording); free text is kept only for API callers.
+    if lien_choice:
+        rules = VERIFIER_CFG["banks"].get(f["bank_host"], {}).get("lien_rules") or {}
+        if lien_choice == "aicte":
+            lien = (rules.get("in_favour_of_aicte") or [""])[0]
+        elif lien_choice == "none":
+            lien = "NO LIEN"
+        elif lien_choice == "loan":
+            amt = policy.money(loan_amount)
+            if amt is None or amt <= 0:
+                raise HTTPException(422, "Enter the loan or overdraft amount in rupees.")
+            lien = f"LOAN {amt // 100}.{amt % 100:02d} AGAINST DEPOSIT"
+        else:
+            raise HTTPException(422, "Unknown lien answer.")
     answers = {"status": status.strip(), "balance": balance.strip(), "maturity": maturity.strip(), "holders": holders.strip(), "lien": lien.strip()}
     fields = {k: ({"state": "proven", "value": v} if v else {"state": "not_exposed"}) for k, v in answers.items()}
     br = next((x for x in BANK_DIR.get(f["bank_host"], {}).get("branches", []) if x["code"] == r["branch_code"]), {})
@@ -1326,24 +1541,58 @@ def branch_inbox(request: Request):
 
 # ----------------------------------------------------------------- release clearance (multi-department)
 @app.post("/fdrs/{fid}/release/clear")
-def release_clear(request: Request, fid: str, csrf: str = Form(""), dept: str = Form(""), decision: str = Form("clear"), note: str = Form("")):
-    s = officer_post(request, csrf)
+async def release_clear(request: Request, fid: str):
+    """A department reviewer records its own department's decision, with a reason and a supporting memo
+    (uploaded with the decision, or an earlier memo of THIS case uploaded by the same reviewer)."""
+    s = auth.require(request, "officer")
+    form = await request.form()
+    auth.check_csrf(s, form.get("csrf", ""))
+    dept, decision, note = form.get("dept", ""), form.get("decision", "clear"), (form.get("note") or "").strip()
     b = get_fdr_or_404(s, fid)
     rel = b["release_request"]
     depts = lifecycle.RULES["release"]["departments"]
-    if not rel:
-        raise HTTPException(409, "No release has been proposed.")
+    who = auth.officer_id(s)
     if dept not in depts or decision not in ("clear", "object"):
         raise HTTPException(400, "Unknown department or decision.")
+    if auth.OFFICER_DEPT.get(who) != dept:
+        db.event(f"officer:{who}", "release_clearance_refused", fid, dept=dept, why="not this department's reviewer")
+        raise HTTPException(403, f"Only the {depts[dept]} reviewer can decide for {depts[dept]}.")
+    if not rel:
+        raise HTTPException(409, "No release has been proposed.")
+    if who == rel["proposed_by"]:
+        raise HTTPException(403, "The proposer cannot also clear the release.")
     if dept in b["clearances"]:
         raise HTTPException(409, f"{depts[dept]} has already recorded its decision.")
-    note = note.strip()
-    if decision == "object" and len(note) < 10:
-        raise HTTPException(422, "An objection needs a reason of at least 10 characters.")
-    who = auth.officer_id(s)
-    db.x("INSERT INTO release_clearances(release_id,dept,decision,officer,at,note) VALUES(?,?,?,?,?,?)",
-         (rel["id"], dept, decision, who, time.time(), note[:300]))
-    db.event(f"officer:{who}", f"release_{'cleared' if decision == 'clear' else 'objection'}", fid, release=rel["id"], dept=dept, note=note[:300])
+    if len(note) < 10:
+        raise HTTPException(422, "Record the reason for the decision (at least 10 characters).")
+    memo, doc_id = form.get("memo"), form.get("doc_id", "")
+    if memo is not None and getattr(memo, "filename", ""):
+        data = await memo.read(vault.MAX_BYTES + 1)
+        try:
+            mime = vault.check(data)
+        except vault.Refused as e:
+            raise HTTPException(422, f"Memo refused: {e}")
+    elif doc_id:
+        d = db.q1("SELECT * FROM documents WHERE id=?", (int(doc_id) if str(doc_id).isdigit() else -1,))
+        if not d or d["fdr_id"] != fid or d["kind"] != "clearance_memo" or d["uploaded_by"] != f"officer:{who}":
+            raise HTTPException(422, "That memo is not a clearance memo you uploaded for this case.")
+        data = None
+    else:
+        raise HTTPException(422, "Attach the department's memo supporting this decision.")
+    now = time.time()
+
+    def work(c):
+        nonlocal doc_id
+        if data is not None:
+            stored, wk, nonce, sha = vault.seal(fid, data)
+            doc_id = c.execute("INSERT INTO documents(fdr_id,kind,filename,mime,size,sha256,stored_as,wrapped_key,nonce,uploaded_by,uploaded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                               (fid, "clearance_memo", re.sub(r"[^\w.\- ]", "_", memo.filename)[:120], mime, len(data), sha, stored, wk, nonce, f"officer:{who}", now)).lastrowid
+        if c.execute("SELECT 1 FROM release_clearances WHERE release_id=? AND dept=?", (rel["id"], dept)).fetchone():
+            raise HTTPException(409, f"{depts[dept]} has already recorded its decision.")
+        c.execute("INSERT INTO release_clearances(release_id,dept,decision,officer,at,note) VALUES(?,?,?,?,?,?)",
+                  (rel["id"], dept, decision, who, now, f"{note[:300]} [memo #{doc_id}]"))
+        db.event_in(c, f"officer:{who}", f"release_{'cleared' if decision == 'clear' else 'objection'}", fid, release=rel["id"], dept=dept, note=note[:300], memo=int(doc_id))
+    db.tx(work)
     return RedirectResponse(f"/fdrs/{fid}#release", 303)
 
 
@@ -1360,6 +1609,8 @@ def verify_release(request: Request, d: str = "", sig: str = ""):
             rel = db.q1("SELECT state FROM release_requests WHERE letter_no=?", (payload.get("letter_no"),))
             if not rel:
                 result = "valid_unknown"   # signature valid, but this portal has no record (e.g. after a demo reset)
+            elif rel["state"] == "revoked":
+                result = "revoked"         # genuine signature, but AICTE has revoked this instruction: do not execute
         except Exception:
             result = "invalid"
     return render(request, "verify.html", auth.read(request), result=result, payload=payload)
@@ -1431,13 +1682,14 @@ def notifications_page(request: Request, audience: str = ""):
     s = auth.require(request)
     if s["role"] == "officer":
         lifecycle.run_daily(bundles_by_inst())
+        mailer.deliver_pending()
         rows = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience!='institution' AND (?='' OR audience=?) ORDER BY id DESC LIMIT 300", (audience, audience))
-        outbox = db.q1("SELECT COUNT(*) AS n FROM notifications WHERE channel='email'")["n"]
+        outbox = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) AS n FROM notifications WHERE channel='email' GROUP BY status")}
     else:
         lifecycle.run_daily(bundles_by_inst(s["inst"]))
         rows = db.q("SELECT * FROM notifications WHERE channel='in_app' AND audience='institution' AND institution_id=? ORDER BY id DESC LIMIT 300", (s["inst"],))
-        outbox = db.q1("SELECT COUNT(*) AS n FROM notifications WHERE channel='email' AND audience='institution' AND institution_id=?", (s["inst"],))["n"]
-    return render(request, "notifications.html", s, rows=rows, outbox=outbox, audience=audience, LADDER=lifecycle.LADDER)
+        outbox = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) AS n FROM notifications WHERE channel='email' AND audience='institution' AND institution_id=? GROUP BY status", (s["inst"],))}
+    return render(request, "notifications.html", s, rows=rows, outbox=outbox, audience=audience, LADDER=lifecycle.LADDER, smtp=mailer.configured())
 
 
 @app.post("/notifications/run")
@@ -1449,7 +1701,8 @@ def notifications_run(request: Request, csrf: str = Form(""), as_of: str = Form(
     except ValueError:
         raise HTTPException(422, "Enter a valid date.")
     n = lifecycle.run_daily(bundles_by_inst(), d)
-    db.event(auth.actor(s), "daily_check_run", None, as_of=d.isoformat(), added=n)
+    sent = mailer.deliver_pending()
+    db.event(auth.actor(s), "daily_check_run", None, as_of=d.isoformat(), added=n, email=sent)
     return RedirectResponse("/notifications?ran=" + str(n), 303)
 
 

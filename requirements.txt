@@ -1,4 +1,4 @@
-# Runtime (pinned to the versions the 96-test suite passed on, 29 Oct 2026)
+# Runtime (pinned to the versions the 254-test suite passed on, 30 Oct 2026)
 fastapi==0.162.0
 starlette==1.7.0
 uvicorn==0.54.0
@@ -6,3 +6,4 @@ jinja2==3.1.6
 python-multipart==0.0.32
 cryptography==50.0.1
 qrcode==8.2
+openpyxl==3.1.5

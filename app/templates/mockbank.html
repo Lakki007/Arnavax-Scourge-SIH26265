@@ -22,8 +22,10 @@
         <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="fd_number" value="{{ r.d.fd_number }}">
         <label class="skip" for="b-{{ r.d.fd_number }}">Behaviour for {{ r.d.fd_number }}</label>
         <select id="b-{{ r.d.fd_number }}" name="behaviour" style="min-width:250px">
-          {% for k, lab in BEHAVIOURS.items() %}<option value="{{ k }}" {% if r.d.behaviour == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+          {% for k, lab in BEHAVIOURS.items() %}<option value="{{ k }}" {% if (r.d.behaviour == k and not r.d.lien_custom) or (k == 'custom_lien' and r.d.lien_custom) %}selected{% endif %}>{{ lab }}</option>{% endfor %}
         </select>
+        <label class="skip" for="l-{{ r.d.fd_number }}">Lien wording</label>
+        <input id="l-{{ r.d.fd_number }}" name="lien_text" value="{{ r.d.lien if r.d.lien_custom else '' }}" placeholder="lien wording, e.g. AICTE LIEN REMOVED" maxlength="80" style="min-width:220px">
         <button class="btn btn-quiet btn-sm">Save</button>
       </form>
     </td>

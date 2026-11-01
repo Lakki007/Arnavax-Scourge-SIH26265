@@ -22,7 +22,8 @@ from .settings import VAR
 VAULT = VAR / "vault"
 VAULT.mkdir(parents=True, exist_ok=True)
 MAX_BYTES = 2 * 1024 * 1024
-KINDS = {"fdr_receipt": "FDR receipt", "bank_letter": "Bank letter / e-advice", "renewal": "Renewal advice", "other": "Other"}
+KINDS = {"fdr_receipt": "FDR receipt", "bank_letter": "Bank letter / e-advice", "renewal": "Renewal advice",
+         "clearance_memo": "Department clearance memo", "bank_acknowledgement": "Bank acknowledgement of release", "other": "Other"}
 PDF_BAD = (b"/JavaScript", b"/JS", b"/Launch", b"/EmbeddedFile", b"/RichMedia", b"/Encrypt", b"/XFA")
 
 

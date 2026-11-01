@@ -3,7 +3,7 @@
   * 10-year term gaps,
   * the reminder / escalation ladder (idempotent daily job writing a notification outbox).
 Everything here is deterministic and recomputed from the database; nothing is sent anywhere
-(e-mail is queued in the outbox only)."""
+(e-mail is delivered by app/mailer.py when SMTP is configured, with retry)."""
 import json
 import time
 from datetime import date, timedelta
@@ -90,7 +90,7 @@ def _notify(fdr_id, inst_id, kind, step, audience, title, body, as_of):
         db.x("INSERT OR IGNORE INTO notifications(fdr_id,institution_id,kind,step,audience,channel,title,body,created_at,as_of,status) "
              "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
              (fdr_id or "", inst_id, kind, step, audience, channel, title, body, time.time(), as_of.isoformat(),
-              "shown" if channel == "in_app" else "queued (demo: not sent)"))
+              "shown" if channel == "in_app" else "queued"))
 
 
 def run_daily(bundles_by_inst, as_of: date | None = None):

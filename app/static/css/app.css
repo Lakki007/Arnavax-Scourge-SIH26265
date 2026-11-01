@@ -88,7 +88,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--ink-2); font
 .st-discrepancy { color: var(--coral); background: var(--coral-soft); border-color: rgba(255,138,107,.32); }
 .st-insufficient_evidence, .st-stale, .st-on_hold { color: var(--amber); background: var(--amber-soft); border-color: rgba(255,207,112,.3); }
 .st-rejected, .st-escalated { color: var(--rose); background: var(--rose-soft); border-color: rgba(255,107,139,.32); }
-.st-requested, .st-release_pending { color: var(--violet); background: var(--violet-soft); border-color: rgba(139,108,255,.4); }
+.st-requested, .st-release_pending, .st-instruction_issued { color: var(--violet); background: var(--violet-soft); border-color: rgba(139,108,255,.4); }
 .st-submitted { color: var(--ink-2); background: #111113; border-color: var(--line-2); }
 .st-released, .st-renewed { color: var(--ink); background: #18181b; border-color: var(--line-2); }
 

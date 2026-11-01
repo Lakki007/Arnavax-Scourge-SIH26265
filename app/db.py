@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS events(
 CREATE TABLE IF NOT EXISTS release_requests(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER NOT NULL,
   proposed_by TEXT NOT NULL, proposed_at REAL NOT NULL, note TEXT NOT NULL,
-  state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn')),
+  state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn','revoked')),
   decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT, signed_json TEXT, signature TEXT);
 CREATE TABLE IF NOT EXISTS eadvices(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER,
@@ -63,9 +63,12 @@ CREATE TABLE IF NOT EXISTS release_clearances(
   id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), dept TEXT NOT NULL,
   decision TEXT NOT NULL CHECK(decision IN ('clear','object')), officer TEXT NOT NULL, at REAL NOT NULL, note TEXT,
   UNIQUE(release_id, dept));
+CREATE TABLE IF NOT EXISTS accounts(
+  username TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('officer','institution')), institution_id TEXT, officer TEXT,
+  salt TEXT NOT NULL, pw_hash TEXT NOT NULL, created_at REAL NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS release_approvals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), officer TEXT NOT NULL,
-  at REAL NOT NULL, UNIQUE(release_id, officer));
+  at REAL NOT NULL, fp TEXT, UNIQUE(release_id, officer, fp));
 CREATE TABLE IF NOT EXISTS branch_requests(
   id TEXT PRIMARY KEY, fdr_id TEXT NOT NULL REFERENCES fdrs(id), branch_code TEXT NOT NULL, contact TEXT NOT NULL,
   token_sha256 TEXT NOT NULL, code_sha256 TEXT NOT NULL, created_at REAL NOT NULL, expires_at REAL NOT NULL,
@@ -118,6 +121,12 @@ def _migrate(c):
     for col in ("signed_json", "signature"):
         if col not in rcols:
             c.execute(f"ALTER TABLE release_requests ADD COLUMN {col} TEXT")
+    if "fp" not in {r[1] for r in c.execute("PRAGMA table_info(release_approvals)")}:
+        c.execute("ALTER TABLE release_approvals ADD COLUMN fp TEXT")
+    ncols = {r[1] for r in c.execute("PRAGMA table_info(notifications)")}
+    for col, typ in (("attempts", "INTEGER NOT NULL DEFAULT 0"), ("next_try", "REAL"), ("last_error", "TEXT")):
+        if col not in ncols:
+            c.execute(f"ALTER TABLE notifications ADD COLUMN {col} {typ}")
     if "renews_fdr_id" not in {r[1] for r in c.execute("PRAGMA table_info(fdrs)")}:
         c.execute("ALTER TABLE fdrs ADD COLUMN renews_fdr_id TEXT")
 
@@ -168,6 +177,15 @@ def event(actor: str, kind: str, fdr_id=None, **detail):
         at, dj = time.time(), json.dumps(detail, default=str)
         x("INSERT INTO events(at,actor,kind,fdr_id,detail_json,prev_hash,hash) VALUES(?,?,?,?,?,?,?)",
           (at, actor, kind, fdr_id, dj, prev, chain_hash(prev, at, actor, kind, fdr_id, dj)))
+
+
+def event_in(c, actor: str, kind: str, fdr_id=None, **detail):
+    """Append an audit entry inside the caller's open transaction (it commits or rolls back with the change it describes)."""
+    last = c.execute("SELECT hash FROM events ORDER BY id DESC LIMIT 1").fetchone()
+    prev = (last["hash"] if last and last["hash"] else GENESIS)
+    at, dj = time.time(), json.dumps(detail, default=str)
+    c.execute("INSERT INTO events(at,actor,kind,fdr_id,detail_json,prev_hash,hash) VALUES(?,?,?,?,?,?,?)",
+              (at, actor, kind, fdr_id, dj, prev, chain_hash(prev, at, actor, kind, fdr_id, dj)))
 
 
 def verify_chain():

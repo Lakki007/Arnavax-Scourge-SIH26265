@@ -14,7 +14,32 @@
   </div>
   <div class="head-status">{{ status(b.status) }}{% if b.status[2] %}<span class="muted small">{{ b.status[2] }}</span>{% endif %}</div>
 </div>
-{% if f.released_at %}<div class="note note-good" role="status" style="margin-bottom:24px"><b>Released.</b> <a href="/fdrs/{{ f.id }}/release-letter">Open the release letter</a>.</div>{% endif %}
+{% if f.released_at %}<div class="note note-good" role="status" style="margin-bottom:24px"><b>Released.</b> The bank acknowledged the signed instruction. <a href="/fdrs/{{ f.id }}/release-letter">Open the release letter</a>.</div>
+{% elif b.issued %}<section class="panel" id="completion" style="margin-bottom:24px;padding:20px">
+  <h2 style="margin-top:0">Release instruction issued: awaiting the bank's acknowledgement</h2>
+  <p class="small">Letter <b>{{ b.issued.letter_no }}</b> was signed and sent. <a href="/fdrs/{{ f.id }}/release-letter">Open the release letter</a>. The deposit stays monitored; it is marked released only when the bank acknowledges executing this letter.</p>
+  {% if s.role == 'officer' and s.who in ['RB-04'] %}
+  <form method="post" action="/fdrs/{{ f.id }}/release/complete" enctype="multipart/form-data" class="stack" id="complete-form">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="field"><label for="c-letter">Letter number on the acknowledgement</label><input id="c-letter" name="letter_no" required></div>
+    <div class="field"><label for="c-fd">FD number on the acknowledgement</label><input id="c-fd" name="fd_number" required></div>
+    <div class="field"><label for="c-amt">Amount on the acknowledgement (₹)</label><input id="c-amt" name="amount" inputmode="decimal" required></div>
+    <div class="field"><label for="c-ref">Bank's reference number</label><input id="c-ref" name="bank_ref" required></div>
+    <div class="field"><label for="c-ack">Bank acknowledgement (PDF/PNG/JPEG)</label><input id="c-ack" type="file" name="ack" accept=".pdf,.png,.jpg,.jpeg" required></div>
+    <label class="small"><input type="checkbox" name="attest" value="yes"> If this is a scan: I checked it against the bank's original and it names this letter, FD number and amount (recorded as a manual attestation).</label>
+    <button class="btn btn-solid">Record completion</button>
+  </form>
+  {% elif s.role == 'officer' and s.who in ['RB-02', 'RB-03'] %}
+  <form method="post" action="/fdrs/{{ f.id }}/release/revoke" class="actions" id="revoke-form" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <input name="reason" minlength="10" required placeholder="Reason to revoke (e.g. superseded by a corrected instruction)" style="min-width:320px">
+    <button class="btn btn-ghost btn-sm">Revoke instruction</button>
+  </form>
+  {% endif %}
+  {% if s.role == 'officer' and s.who not in ['RB-04'] %}
+  <form method="post" action="/signin"><input type="hidden" name="role" value="officer:RB-04"><input type="hidden" name="next" value="/fdrs/{{ f.id }}#completion"><button class="btn btn-quiet">Switch to completion recorder RB-04</button></form>
+  {% endif %}
+</section>{% endif %}
 {% if request.query_params.get('registered') %}<div class="note note-good" role="status" style="margin-bottom:24px"><b>FDR registered.</b> Only paper vouches for it until a bank-session proof is verified and accepted.</div>{% endif %}
 
 {# ---- the one next step ---- #}
@@ -39,7 +64,7 @@
       <button class="btn btn-solid" type="button" data-open="lift-dlg">Lift hold</button>
     {% elif nxt.kind == 'release_pending' %}
       {% if not nxt.mine %}
-      <form method="post" action="/fdrs/{{ f.id }}/release/approve" class="actions" style="flex-wrap:nowrap"><input type="hidden" name="csrf" value="{{ s.csrf }}">{% if officer_mfa %}<input name="otp" inputmode="numeric" maxlength="6" placeholder="2FA code" aria-label="Authenticator code for step-up" required style="width:110px">{% endif %}<button class="btn btn-solid" {% if not gates.approve[0] %}disabled aria-describedby="why-ap"{% endif %}>Approve release</button></form>
+      <form method="post" action="/fdrs/{{ f.id }}/release/approve" class="actions" style="flex-wrap:nowrap"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="version" value="{{ b.release_version }}">{% if officer_mfa %}<input name="otp" inputmode="numeric" maxlength="6" placeholder="2FA code" aria-label="Authenticator code for step-up" required style="width:110px">{% endif %}<button class="btn btn-solid" {% if not gates.approve[0] %}disabled aria-describedby="why-ap"{% endif %}>Approve release</button></form>
       {% if not gates.approve[0] %}<p class="why" id="why-ap">{{ gates.approve[1] }}</p>{% endif %}
       {% endif %}
       <button class="btn btn-ghost" type="button" data-open="rej-dlg">{{ 'Withdraw proposal' if nxt.mine else 'Reject' }}</button>
@@ -71,14 +96,23 @@
   {% for dk, dl in DEPTS.items() %}{% set c = b.clearances.get(dk) %}<tr id="clr-{{ dk }}"><td>{{ dl }}</td><td>{% if c %}<span class="st {{ 'st-confirmed' if c.decision == 'clear' else 'st-discrepancy' }}">{{ 'Cleared' if c.decision == 'clear' else 'Objection' }}</span> <span class="muted small">by {{ c.officer }}{% if c.note %}: {{ c.note }}{% endif %}</span>{% else %}<span class="muted small">pending</span>{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>
   <p class="small" style="margin-top:10px">Signatures: {% for a in b.approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% else %}none yet{% endfor %} ({{ b.approvals|length }} of {{ b.signers_needed }}).</p>
-  {% if s.role == 'officer' %}
-  <form method="post" action="/fdrs/{{ f.id }}/release/clear" class="actions" style="margin-top:8px;align-items:flex-end">
-    <input type="hidden" name="csrf" value="{{ s.csrf }}">
-    <div class="field" style="margin:0"><label for="clr-dept">Department</label><select id="clr-dept" name="dept">{% for dk, dl in DEPTS.items() %}{% if dk not in b.clearances %}<option value="{{ dk }}">{{ dl }}</option>{% endif %}{% endfor %}</select></div>
-    <div class="field" style="margin:0"><label for="clr-note">Note</label><input id="clr-note" name="note" placeholder="required for an objection"></div>
+  {% if b.stale_approvals %}<p class="note note-warn small" id="stale-signatures"><b>Signatures withdrawn automatically:</b> {% for a in b.stale_approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% endfor %} signed before the case changed (evidence, clearances, documents, hold or amount). They must sign again.</p>{% endif %}
+  {% if s.role == 'officer' %}{% set mydept = OFFICER_DEPT.get(s.who) %}
+  {% if mydept and mydept not in b.clearances and rr.state == 'pending' %}
+  <form method="post" action="/fdrs/{{ f.id }}/release/clear" enctype="multipart/form-data" class="actions" id="clr-form" style="margin-top:8px;align-items:flex-end">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="dept" value="{{ mydept }}">
+    <div class="field" style="margin:0"><label>Department</label><b>{{ DEPTS[mydept] }}</b> <span class="muted small">(you, {{ s.who }})</span></div>
+    <div class="field" style="margin:0"><label for="clr-note">Reason</label><input id="clr-note" name="note" required minlength="10" placeholder="e.g. No grievance pending (register checked 30-10-2026)"></div>
+    <div class="field" style="margin:0"><label for="clr-memo">Supporting memo (PDF/PNG/JPEG)</label><input id="clr-memo" type="file" name="memo" accept=".pdf,.png,.jpg,.jpeg" required></div>
     <button class="btn btn-quiet btn-sm" name="decision" value="clear">Clear</button>
     <button class="btn btn-ghost btn-sm" name="decision" value="object">Object</button>
   </form>
+  {% elif not mydept %}
+  <div class="actions" style="margin-top:8px">{% for dk, dl in DEPTS.items() %}{% if dk not in b.clearances %}{% for oid, odept in OFFICER_DEPT.items() %}{% if odept == dk %}
+    <form method="post" action="/signin"><input type="hidden" name="role" value="officer:{{ oid }}"><input type="hidden" name="next" value="/fdrs/{{ f.id }}#release"><button class="btn btn-quiet btn-sm">Switch to {{ dl }} reviewer {{ oid }}</button></form>
+  {% endif %}{% endfor %}{% endif %}{% endfor %}</div>
+  <p class="muted small">Each department decides only for itself, with a reason and a memo. The proposer and approvers cannot clear.</p>
+  {% endif %}
   {% endif %}
 </section>
 {% endif %}
