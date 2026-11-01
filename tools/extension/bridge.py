@@ -65,9 +65,20 @@ def build_facts(bank_host, fd_number, record):
     return {"gate": "facts_ok", "reason": None, "fields": fields}
 
 
-def _post(url, key, path, payload):
-    req = urllib.request.Request(url + path, data=json.dumps(payload).encode(),
-                                headers={"Content-Type": "application/json", "X-Internal-Key": key}, method="POST")
+def _verifier_signature(raw):
+    """The extension's verifier signs its results like scourge_verifierd does; the portal refuses unsigned facts."""
+    sys.path.insert(0, str(ROOT))
+    from app import evidence_sig
+    from app.settings import VERIFIER_KEY_FILE
+    return evidence_sig.sign(raw, VERIFIER_KEY_FILE.read_text(encoding="utf-8").strip())
+
+
+def _post(url, key, path, payload, sign=False):
+    raw = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json", "X-Internal-Key": key}
+    if sign:
+        headers["X-Verifier-Signature"] = _verifier_signature(raw)
+    req = urllib.request.Request(url + path, data=raw, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.status, json.loads(r.read() or b"{}")
@@ -88,7 +99,7 @@ def post_record(app, internal_key, challenge_id, institution_id, token, bank_hos
     facts = build_facts(bank_host, body.get("fd_number", ""), record)
     facts["challenge_id"] = challenge_id
     facts["metrics"] = metrics or {"source": "browser_extension"}
-    code, body = _post(app, internal_key, "/internal/evidence", facts)
+    code, body = _post(app, internal_key, "/internal/evidence", facts, sign=True)
     if code != 200:
         raise RuntimeError(f"evidence rejected: {code} {body}")
     return body

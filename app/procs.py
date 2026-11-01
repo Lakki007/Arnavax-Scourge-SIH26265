@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 
-from .settings import BANK_STATE, BIN, DEMO, INTERNAL_KEY, LOGS, ROOT, VERIFIER_ADDR, VERIFIER_MODE
+from .settings import BANK_STATE, BIN, DEMO, INTERNAL_KEY, LOGS, ROOT, VERIFIER_ADDR, VERIFIER_KEY_FILE, VERIFIER_MODE
 
 _procs: dict[str, subprocess.Popen] = {}
 _lock = threading.Lock()
@@ -46,7 +46,7 @@ def start(name):
         p = _procs.get(name)
         if p and p.poll() is None:
             return True
-        env = dict(os.environ, SCOURGE_INTERNAL_KEY=INTERNAL_KEY)
+        env = dict(os.environ, SCOURGE_INTERNAL_KEY=INTERNAL_KEY, SCOURGE_VERIFIER_KEY=str(VERIFIER_KEY_FILE))
         log = open(LOGS / f"{name}.log", "a", encoding="utf-8")
         _procs[name] = subprocess.Popen(_cmd(name), cwd=ROOT, env=env, stdout=log, stderr=log, start_new_session=True)
     for _ in range(40):

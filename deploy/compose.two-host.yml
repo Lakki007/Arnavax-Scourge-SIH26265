@@ -14,9 +14,10 @@ services:
       SCOURGE_INTERNAL_KEY: ${SCOURGE_INTERNAL_KEY:?set a long random SCOURGE_INTERNAL_KEY}
       SCOURGE_AUTH: ${SCOURGE_AUTH:-demo}
       SCOURGE_ACCESS_CODE: ${SCOURGE_ACCESS_CODE:-}
+      SCOURGE_VERIFIER_PUBKEY_FILE: /verifier-pub/verifier_signing.pub    # the verifier's PUBLIC key only (read-only)
     ports: ["8000:8000"]
     networks: [public, aicte-internal]
-    volumes: ["portal-var:/srv/scourge/var"]
+    volumes: ["portal-var:/srv/scourge/var", "verifier-pub:/verifier-pub:ro"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/api/health"]
@@ -30,7 +31,10 @@ services:
     environment:
       SCOURGE_INTERNAL_KEY: ${SCOURGE_INTERNAL_KEY:?set a long random SCOURGE_INTERNAL_KEY}
       SCOURGE_APP_INTERNAL: portal:8081
+      SCOURGE_VERIFIER_KEY: /verifier-private/verifier_signing.key   # private key: verifier-only volume
+      SCOURGE_VERIFIER_PUB_OUT: /verifier-pub                        # entrypoint copies only the .pub here
     ports: ["7047:7047"]
+    volumes: ["verifier-private:/verifier-private", "verifier-pub:/verifier-pub"]
     networks: [public, aicte-internal]
     restart: unless-stopped
 
@@ -41,3 +45,5 @@ networks:
 
 volumes:
   portal-var:
+  verifier-private:  # the verifier's signing key; mounted only into the verifier
+  verifier-pub:      # its public key; the portal mounts this read-only and pins it

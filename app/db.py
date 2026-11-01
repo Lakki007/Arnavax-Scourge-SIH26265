@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS challenges(
 CREATE TABLE IF NOT EXISTS evidence(
   id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id TEXT NOT NULL UNIQUE REFERENCES challenges(id),
   fdr_id TEXT NOT NULL, received_at REAL NOT NULL, gate TEXT NOT NULL, reason TEXT, decision TEXT NOT NULL,
-  facts_json TEXT NOT NULL, match_json TEXT NOT NULL, metrics_json TEXT NOT NULL);
+  facts_json TEXT NOT NULL, match_json TEXT NOT NULL, metrics_json TEXT NOT NULL,
+  facts_raw TEXT, verifier_sig TEXT, verifier_key TEXT);
 CREATE TABLE IF NOT EXISTS actions(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL, evidence_id INTEGER,
   action TEXT NOT NULL CHECK(action IN ('accept','escalate','release')), note TEXT, actor TEXT NOT NULL, at REAL NOT NULL);
@@ -134,6 +135,10 @@ def _migrate(c):
     for col, typ in (("attempts", "INTEGER NOT NULL DEFAULT 0"), ("next_try", "REAL"), ("last_error", "TEXT")):
         if col not in ncols:
             c.execute(f"ALTER TABLE notifications ADD COLUMN {col} {typ}")
+    ecols = {r[1] for r in c.execute("PRAGMA table_info(evidence)")}
+    for col in ("facts_raw", "verifier_sig", "verifier_key"):
+        if col not in ecols:
+            c.execute(f"ALTER TABLE evidence ADD COLUMN {col} TEXT")
     if "renews_fdr_id" not in {r[1] for r in c.execute("PRAGMA table_info(fdrs)")}:
         c.execute("ALTER TABLE fdrs ADD COLUMN renews_fdr_id TEXT")
 

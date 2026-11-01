@@ -1,0 +1,57 @@
+{
+ "hardware": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 2,
+  "ram_gb": 7.8,
+  "os": "Linux 6.18.44-fc-v185",
+  "python": "3.13.18"
+ },
+ "sequential": {
+  "proofs": 20,
+  "end_to_end_s_p50": 1.12,
+  "end_to_end_s_p95": 1.35,
+  "prover_to_verifier_MB_median": 38.7,
+  "note": "end to end = officer challenge -> institution proof -> verifier -> signed facts recorded"
+ },
+ "burst": {
+  "requested_at_once": 6,
+  "accepted_immediately": 2,
+  "refused_429_busy": 4,
+  "refused_challenges_left_unused": 4,
+  "client_retries": 8,
+  "all_verified": true,
+  "wall_time_s": 5.7,
+  "throughput_proofs_per_min": 63.0
+ },
+ "verifier_outage": {
+  "proof_while_down": "failed",
+  "challenge_left_unused": true,
+  "verifier_restart_s": 0.11,
+  "retry_same_challenge": "verified"
+ },
+ "portal_crash_mid_proof": {
+  "killed_portal": true,
+  "portal_back_s": 60.2,
+  "interrupted_job_state": "failed",
+  "reset_not_blocked": true,
+  "records_survive": true
+ },
+ "recovery": {
+  "backup_s": 0.05,
+  "backup_MB": 0.01,
+  "verify_ok": true,
+  "verify_s": 0.08,
+  "restore_ok": true,
+  "restore_s": 0.08,
+  "key_rotation_ok": true,
+  "key_rotation_s": 0.07,
+  "evidence_signatures_verify": true,
+  "audit_line": "1 of 1 results verify against verifier key 57082df54063590e"
+ },
+ "peak_memory_MB": {
+  "portal": 129,
+  "scourge_verifie": 405,
+  "scourge_mockban": 30,
+  "scourge_prove": 181
+ }
+}

@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import settings
+from . import evidence_sig
 from . import accounts, auth, db, eadvice, i18n, jobs, lifecycle, mailer, policy, procs, reports, seed, totp, vault, views
 from .settings import AICTE_SIGNING_KEY, ROOT, ACCESS_CODE, COOKIE_SECURE, DEMO, INTERNAL_KEY, UPLOAD_MAX_BYTES, UPLOAD_TYPES, UPLOADS, VERIFIER_CFG
 
@@ -1266,7 +1267,15 @@ async def consume(request: Request):
 @app.post("/internal/evidence")
 async def post_evidence(request: Request):
     internal(request)
-    facts = await request.json()
+    raw = await request.body()
+    ok, key_fp, why = evidence_sig.check(raw, request.headers.get("x-verifier-signature", ""))
+    if not ok:
+        db.event("anonymous", "evidence_refused", None, reason=why)
+        raise HTTPException(403, f"evidence refused: {why}")
+    try:
+        facts = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "evidence is not JSON")
     cid = str(facts.get("challenge_id", ""))
     c = db.q1("SELECT * FROM challenges WHERE id=? AND state='consumed'", (cid,))
     if not c:
@@ -1279,9 +1288,10 @@ async def post_evidence(request: Request):
     if decision == "insufficient_evidence" and not facts.get("reason"):
         missing = [k for k, v in match.items() if v["result"] in ("not_exposed", "ambiguous", "unrecognised", "unparseable", "unsupported")]
         facts["reason"] = "required_field_unknown:" + ",".join(missing) if missing else None
-    eid = db.x("INSERT INTO evidence(challenge_id,fdr_id,received_at,gate,reason,decision,facts_json,match_json,metrics_json) VALUES(?,?,?,?,?,?,?,?,?)",
-               (cid, fdr["id"], time.time(), facts.get("gate", "rejected"), facts.get("reason"), decision, json.dumps(facts), json.dumps(match), json.dumps(metrics)))
-    db.event("verifier", "evidence_recorded", fdr["id"], evidence_id=eid, decision=decision, reason=facts.get("reason"))
+    eid = db.x("INSERT INTO evidence(challenge_id,fdr_id,received_at,gate,reason,decision,facts_json,match_json,metrics_json,facts_raw,verifier_sig,verifier_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+               (cid, fdr["id"], time.time(), facts.get("gate", "rejected"), facts.get("reason"), decision, json.dumps(facts), json.dumps(match), json.dumps(metrics),
+                raw.decode("utf-8"), request.headers.get("x-verifier-signature"), key_fp))
+    db.event("verifier", "evidence_recorded", fdr["id"], evidence_id=eid, decision=decision, reason=facts.get("reason"), verifier_key=key_fp)
     return {"evidence_id": eid, "decision": decision}
 
 

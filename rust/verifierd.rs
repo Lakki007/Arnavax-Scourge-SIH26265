@@ -3,7 +3,12 @@
 //!   prover -> "SCOURGE1 <challenge_id> <institution_id> <token>\n"
 //!   verifier asks the app to validate + consume the challenge (POST /internal/challenges/consume)
 //!   verifier -> "OK\n" | "ERR <reason>\n"; on OK the same connection carries the MPC-TLS session.
-//! After the session the verifier posts FACTS (never registry decisions) to POST /internal/evidence.
+//! After the session the verifier posts FACTS (never registry decisions) to POST /internal/evidence,
+//! SIGNED with the verifier's own ECDSA (secp256k1) key: the portal accepts only facts whose signature
+//! verifies against the verifier key it has pinned. Holding the portal's internal key, or write access to
+//! the portal's database, is therefore not enough to inject or rewrite "verified" evidence.
+//! Key: $SCOURGE_VERIFIER_KEY (default var/verifier_signing.key, created 0600 on first start); the public
+//! key is written next to it as verifier_signing.pub for the portal to pin.
 //! Freshness: in MPC-TLS the verifier holds a share of the session keys, so the proven session
 //! must be live and must start after the challenge was consumed. The bank never sees the challenge.
 
@@ -21,6 +26,39 @@ use std::{
 };
 
 use common::*;
+use k256::ecdsa::{Signature, SigningKey, signature::Signer};
+use k256::elliptic_curve::sec1::ToEncodedPoint;
+use std::sync::OnceLock;
+
+static SIGNER: OnceLock<SigningKey> = OnceLock::new();
+
+/// Load the verifier's signing key, or create one (0600) on first start; always (re)write the public key.
+fn load_signer() -> anyhow::Result<(SigningKey, String)> {
+    use std::io::{Read, Write};
+    use std::os::unix::fs::OpenOptionsExt;
+    let path = std::env::var("SCOURGE_VERIFIER_KEY").unwrap_or_else(|_| "var/verifier_signing.key".into());
+    let p = std::path::Path::new(&path);
+    let sk = if p.exists() {
+        SigningKey::from_slice(&hex::decode(std::fs::read_to_string(p)?.trim())?)?
+    } else {
+        if let Some(d) = p.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        let mut b = [0u8; 32];
+        let k = loop {
+            std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
+            if let Ok(k) = SigningKey::from_slice(&b) {
+                break k;
+            }
+        };
+        let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(p)?;
+        f.write_all(hex::encode(k.to_bytes()).as_bytes())?;
+        k
+    };
+    let pub_hex = hex::encode(sk.verifying_key().to_encoded_point(true).as_bytes());
+    std::fs::write(format!("{}.pub", path.trim_end_matches(".key")), &pub_hex)?;
+    Ok((sk, pub_hex))
+}
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
@@ -62,10 +100,22 @@ impl AsyncWrite for Counted {
 
 /// Minimal HTTP/1.1 JSON POST to the app's internal API (localhost only).
 async fn post_json(addr: &str, path: &str, key: &str, body: &Value) -> anyhow::Result<(u16, Value)> {
+    post_json_signed(addr, path, key, body, false).await
+}
+
+/// POST JSON; when `sign` is set, add X-Verifier-Signature: hex(ECDSA-secp256k1/SHA-256 over the exact body bytes).
+async fn post_json_signed(addr: &str, path: &str, key: &str, body: &Value, sign: bool) -> anyhow::Result<(u16, Value)> {
     let b = serde_json::to_vec(body)?;
+    let sig_header = if sign {
+        let sk = SIGNER.get().ok_or_else(|| anyhow::anyhow!("verifier signing key not loaded"))?;
+        let sig: Signature = sk.sign(&b);
+        format!("X-Verifier-Signature: {}\r\n", hex::encode(sig.to_bytes()))
+    } else {
+        String::new()
+    };
     let mut s = TcpStream::connect(addr).await?;
     let head = format!(
-        "POST {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nX-Internal-Key: {key}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "POST {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nX-Internal-Key: {key}\r\n{sig_header}Content-Length: {}\r\nConnection: close\r\n\r\n",
         b.len()
     );
     s.write_all(head.as_bytes()).await?;
@@ -131,7 +181,17 @@ async fn main() {
             std::process::exit(2);
         }
     };
-    log(json!({"startup": "ok", "listen": cfg.verifier_listen, "trust": cfg.trust.mode, "allow_hosts": cfg.allow_hosts}));
+    let pub_hex = match load_signer() {
+        Ok((sk, pub_hex)) => {
+            let _ = SIGNER.set(sk);
+            pub_hex
+        }
+        Err(e) => {
+            log(json!({"startup": "refused", "reason": format!("verifier signing key: {e}")}));
+            std::process::exit(2);
+        }
+    };
+    log(json!({"startup": "ok", "listen": cfg.verifier_listen, "trust": cfg.trust.mode, "allow_hosts": cfg.allow_hosts, "verifier_key": pub_hex}));
     let key = Arc::new(key);
     loop {
         let Ok((sock, _)) = listener.accept().await else { continue };
@@ -189,7 +249,7 @@ async fn handle(mut sock: TcpStream, cfg: Config, key: Arc<String>) -> anyhow::R
     };
     out["challenge_id"] = json!(ch.challenge_id);
     out["verifier_trust"] = json!(cfg.trust.mode);
-    match post_json(&cfg.app_internal, "/internal/evidence", &key, &out).await {
+    match post_json_signed(&cfg.app_internal, "/internal/evidence", &key, &out, true).await {
         Ok((200, _)) => log(json!({"challenge": ch.challenge_id, "gate": out["gate"], "posted": true})),
         Ok((c, v)) => log(json!({"challenge": ch.challenge_id, "post_failed": c, "resp": v})),
         Err(e) => log(json!({"challenge": ch.challenge_id, "post_failed": e.to_string()})),

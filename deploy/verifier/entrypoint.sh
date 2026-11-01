@@ -14,4 +14,13 @@ c["app_internal"] = os.environ["SCOURGE_APP_INTERNAL"]
 c["verifier_listen"] = os.environ.get("VERIFIER_LISTEN", "0.0.0.0:7047")
 json.dump(c, open("/tmp/verifier.json", "w", encoding="utf-8"))
 PY
-exec ./bin/scourge_verifierd /tmp/verifier.json
+# Start the verifier, then publish ONLY its public key for the portal to pin (the private key stays here).
+./bin/scourge_verifierd /tmp/verifier.json &
+pid=$!
+if [ -n "${SCOURGE_VERIFIER_PUB_OUT:-}" ] && [ -n "${SCOURGE_VERIFIER_KEY:-}" ]; then
+  pub="${SCOURGE_VERIFIER_KEY%.key}.pub"
+  for i in $(seq 1 50); do [ -s "$pub" ] && break; sleep 0.2; done
+  mkdir -p "$SCOURGE_VERIFIER_PUB_OUT" && cp "$pub" "$SCOURGE_VERIFIER_PUB_OUT/verifier_signing.pub"
+fi
+trap 'kill -TERM $pid' TERM INT
+wait $pid

@@ -37,6 +37,10 @@ DEMO = json.loads(DEMO_PATH.read_text(encoding="utf-8"))
 # stops it, provers are pointed at SCOURGE_VERIFIER_ADDR, and the verifier reports back to the app's
 # internal API over a private network with the shared SCOURGE_INTERNAL_KEY.
 VERIFIER_MODE = os.environ.get("SCOURGE_VERIFIER", "local")
+# The verifier signs every result with its own key. The portal pins its public key: SCOURGE_VERIFIER_PUBKEY (hex),
+# else the file the verifier publishes (local mode: next to the key in var/; external mode: a read-only mount).
+VERIFIER_KEY_FILE = Path(os.environ.get("SCOURGE_VERIFIER_KEY", VAR / "verifier_signing.key"))
+VERIFIER_PUB_FILE = Path(os.environ.get("SCOURGE_VERIFIER_PUBKEY_FILE", str(VERIFIER_KEY_FILE).removesuffix(".key") + ".pub"))
 VERIFIER_ADDR = os.environ.get("SCOURGE_VERIFIER_ADDR", VERIFIER_CFG["verifier_listen"])
 
 
