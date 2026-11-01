@@ -14,6 +14,7 @@ import sys
 from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+MERGE = "--merge" in sys.argv   # add headers missing from headers.txt (e.g. Cookie, Origin) from a second, completed request
 raw = sys.stdin.read().replace("\\\n", " ").replace("\\\r\n", " ")
 if not raw.strip().startswith("curl"):
     sys.exit("Paste a command that starts with: curl '...'  (DevTools -> right-click request -> Copy -> Copy as cURL (bash))")
@@ -39,6 +40,26 @@ method = method or ("POST" if body is not None else "GET")
 
 
 def write(name, text):
+    p = os.path.join(HERE, name)
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    return p
+
+
+if MERGE:
+    hp = os.path.join(HERE, "headers.txt")
+    have = open(hp, encoding="utf-8").read().splitlines()
+    names = {h.split(":", 1)[0].strip().lower() for h in have}
+    keep = {"authorization", "content-type", "content-length", "host"}   # the fresh request's own values win
+    added = [h for h in headers if h.split(":", 1)[0].strip().lower() not in names | keep]
+    write("headers.txt", "\n".join(have + added) + "\n")
+    print("added headers: " + (", ".join(h.split(":", 1)[0] for h in added) or "none"))
+    print("headers.txt now has " + str(len(have) + len(added)) + " headers. Body, URL and Authorization unchanged.")
+    sys.exit(0)
+
+
+def _unused(name, text):
     p = os.path.join(HERE, name)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
