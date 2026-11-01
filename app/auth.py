@@ -23,12 +23,15 @@ def _sign(payload: bytes) -> str:
 
 OFFICERS = {"RB-01": "Scrutiny officer", "RB-02": "Approving officer", "RB-03": "Competent authority (second signer)",
             "PG-01": "Grievance cell (PGRC) reviewer", "VG-01": "Vigilance reviewer", "FN-01": "Finance reviewer",
-            "RB-04": "Release completion recorder"}  # demo identities; real use: AICTE single sign-on / named accounts
+            "RB-04": "Release completion recorder", "RO-S1": "Southern regional officer (scrutiny view)"}  # demo identities; real use: AICTE single sign-on / named accounts
 # Separation of duties, enforced server-side on every release step.
 PROPOSERS = {"RB-01"}                                            # scrutiny: accept evidence, propose a release
 APPROVERS = {"RB-02", "RB-03"}                                   # sign the release (never the proposer)
 OFFICER_DEPT = {"PG-01": "PGRC", "VG-01": "VIG", "FN-01": "FIN"}  # each reviewer decides only its own department
-COMPLETERS = {"RB-04"}                                           # records the bank's acknowledgement that the pledge was released
+COMPLETERS = {"RB-04"}
+# Regional scoping: these officers see only institutions in their region (config/deposit_rules.json "regions").
+# Officers not listed work at headquarters and see every region.
+OFFICER_REGION = {"RO-S1": "SRO"}                                           # records the bank's acknowledgement that the pledge was released
 
 
 def make_cookie(role: str, institution_id: str | None, who: str | None = None) -> str:
@@ -77,5 +80,14 @@ def check_csrf(s, token: str | None):
         raise HTTPException(403, "The form expired. Reload the page and try again.")
 
 
+def region_of(institution_id):
+    from . import db, lifecycle
+    row = db.q1("SELECT city FROM institutions WHERE id=?", (institution_id,))
+    return lifecycle.RULES.get("regions", {}).get("cities", {}).get(row["city"]) if row else None
+
+
 def can_see_fdr(s, fdr) -> bool:
-    return s["role"] == "officer" or (s["role"] == "institution" and s["inst"] == fdr["institution_id"])
+    if s["role"] == "officer":
+        reg = OFFICER_REGION.get(s.get("who") or "")
+        return reg is None or region_of(fdr["institution_id"]) == reg
+    return s["role"] == "institution" and s["inst"] == fdr["institution_id"]

@@ -10,6 +10,9 @@
     <dt>Deposit</dt><dd class="mono">{{ f.fd_number }} ({{ f.id }})</dd>
     <dt>Bank</dt><dd class="mono">{{ f.bank_host }}</dd>
     <dt>Principal</dt><dd>{{ inr(f.principal) }}</dd>
+    {% set sj = (rel.signed_json and rel.signed_json|fromjson) or {} %}{% if sj.settlement %}
+    <dt>Reason</dt><dd>{{ REL_TYPES[sj.release_type].label }}</dd>
+    <dt>Settlement</dt><dd>{% for l in sj.settlement.lines %}{{ DED_KINDS[l.kind] }} to {{ l.payee }}: {{ paise_inr(l.amount_paise) }} <span class="muted small">({{ l.basis }})</span><br>{% endfor %}<b>Refund to the institution: {{ paise_inr(sj.settlement.refund_to_institution_paise) }}</b></dd>{% endif %}
     <dt>Bank confirmation</dt><dd>Bank-session proof #{{ e.id }} of {{ when(e.received_at) }}: {{ LABEL[e.decision] }}</dd>
     <dt>Proposed by</dt><dd>Officer {{ rel.proposed_by }}, {{ when(rel.proposed_at) }}: “{{ rel.note }}”</dd>
     <dt>Clearances</dt><dd>{% for c in clear %}{{ DEPTS[c.dept] }} ({{ c.officer }}){% if not loop.last %}; {% endif %}{% else %}—{% endfor %}</dd>

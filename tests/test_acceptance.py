@@ -1301,3 +1301,108 @@ def test_only_scrutiny_officer_accepts_and_proposes(off, who):
     assert o.post("/fdrs/FDR-001/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0800 not my role").status_code == 403
     if who not in ("RB-02", "RB-03"):
         assert _approve(o, "/fdrs/FDR-001/release/approve").status_code == 403
+
+
+# ---------------------------------------------------------------- L series: release types, settlement, regional scoping
+def _propose_type(off, rtype, fdr="FDR-001"):
+    eid = _confirmed(off, fdr)
+    return off.post(f"/fdrs/{fdr}/decide", action="release", evidence_id=str(eid), note="RB/REL/2026/0700 test release", release_type=rtype)
+
+
+def _ded(sess, fdr="FDR-001", kind="student_refund", payee="214 students, 2025 batch", amount="125000", basis="PGRC order 14/2026, list attached"):
+    return sess.post(f"/fdrs/{fdr}/release/deduction", kind=kind, payee=payee, amount=amount, basis=basis)
+
+
+def test_l01_release_type_is_required_to_be_known(off):
+    assert _propose_type(off, "liquidation").status_code == 422
+    assert db().execute("SELECT count(*) FROM release_requests").fetchone()[0] == 0
+
+
+def test_l02_closure_needs_its_documents_and_only_its_departments(off):
+    assert _propose_type(off, "closure").status_code == 303
+    _clear_all()
+    page = off.get("/fdrs/FDR-001").text
+    assert "Closure order" in page and "missing" in page
+    r = _approve(S("officer:RB-02"), "/fdrs/FDR-001/release/approve")
+    assert r.status_code == 409 and "Closure order" in r.text
+    for kind in ("closure_order", "dues_statement"):
+        assert off.c.post("/fdrs/FDR-001/documents", data={"csrf": off.csrf, "kind": kind},
+                          files={"file": (f"{kind}.pdf", MEMO, "application/pdf")}).status_code == 303
+    assert _approve(S("officer:RB-02"), "/fdrs/FDR-001/release/approve").status_code == 303
+    rt = db().execute("SELECT state, release_type FROM release_requests").fetchone()
+    assert rt == ("approved", "closure")
+
+
+def test_l03_merger_does_not_wait_for_grievance_cell(off):
+    assert _propose_type(off, "merger").status_code == 303
+    for d in ("VIG", "FIN"):
+        assert _clear(S(f"officer:{DEPT_REVIEWER[d]}"), "FDR-001", d).status_code == 303
+    assert off.c.post("/fdrs/FDR-001/documents", data={"csrf": off.csrf, "kind": "merger_order"},
+                      files={"file": ("m.pdf", MEMO, "application/pdf")}).status_code == 303
+    assert _approve(S("officer:RB-02"), "/fdrs/FDR-001/release/approve").status_code == 303
+
+
+def test_l04_settlement_in_paise_is_signed_into_the_instruction(off):
+    _propose_type(off, "term_completed")
+    principal = db().execute("SELECT principal FROM fdrs WHERE id='FDR-001'").fetchone()[0]
+    fin = S("officer:FN-01")
+    assert _ded(off, amount="125000.50").status_code == 303
+    assert _ded(fin, kind="staff_dues", payee="Faculty salary arrears (12 staff)", amount="40000", basis="Finance note FN/2026/33").status_code == 303
+    _clear_all()
+    assert _approve(S("officer:RB-02"), "/fdrs/FDR-001/release/approve").status_code == 303
+    sj = json.loads(db().execute("SELECT signed_json FROM release_requests WHERE state='approved'").fetchone()[0])
+    st = sj["settlement"]
+    p = round(float(principal) * 100)
+    assert st["principal_paise"] == p and st["deductions_paise"] == 12500050 + 4000000
+    assert st["refund_to_institution_paise"] == p - 16500050 and len(st["lines"]) == 2
+    assert sj["release_type"] == "term_completed"
+    letter = off.get("/fdrs/FDR-001/release-letter").text
+    assert "Refund to the institution" in letter and "Faculty salary arrears" in letter
+
+
+def test_l05_claims_validated_and_role_restricted(off):
+    _propose_type(off, "term_completed")
+    principal = db().execute("SELECT principal FROM fdrs WHERE id='FDR-001'").fetchone()[0]
+    assert _ded(S("officer:RB-02")).status_code == 403            # approvers do not write claims
+    assert _ded(S("officer:VG-01")).status_code == 403
+    assert _ded(off, amount="-5").status_code == 422
+    assert _ded(off, amount="12.345").status_code == 422
+    assert _ded(off, amount="0").status_code == 422
+    assert _ded(off, kind="bonus").status_code == 422
+    assert _ded(off, basis="short").status_code == 422
+    over = f"{float(principal) + 1:.2f}"
+    assert _ded(off, amount=over).status_code == 409             # cannot exceed the deposit
+    assert db().execute("SELECT count(*) FROM release_deductions").fetchone()[0] == 0
+    inst = S("institution:INST-42")
+    assert _ded(inst).status_code in (401, 403)
+
+
+def test_l06_changing_claims_withdraws_signatures(off):
+    fid = _two_signer_case(off, "FD-0000990700")
+    _approve(S("officer:RB-02"), f"/fdrs/{fid}/release/approve")
+    assert db().execute("SELECT count(*) FROM release_approvals").fetchone()[0] == 1
+    assert _ded(off, fdr=fid).status_code == 303
+    page = off.get(f"/fdrs/{fid}").text
+    assert 'id="stale-signatures"' in page
+    # the second officer alone cannot now complete it: one valid signature of two
+    assert _approve(S("officer:RB-03"), f"/fdrs/{fid}/release/approve").status_code == 303
+    assert db().execute("SELECT state FROM release_requests WHERE fdr_id=?", (fid,)).fetchone()[0] == "pending"
+    did = db().execute("SELECT id FROM release_deductions").fetchone()[0]
+    assert off.post(f"/fdrs/{fid}/release/deduction/{did}/remove", reason="x").status_code == 422
+    assert off.post(f"/fdrs/{fid}/release/deduction/{did}/remove", reason="Entered against the wrong case").status_code == 303
+    kinds = [r[0] for r in db().execute("SELECT kind FROM events WHERE kind LIKE 'release_deduction_%'")]
+    assert kinds == ["release_deduction_added", "release_deduction_removed"]
+
+
+def test_l07_regional_officer_sees_only_its_region(off):
+    ro = S("officer:RO-S1")                                       # Southern RO: INST-42 (Hyderabad) only
+    reg = ro.get("/register").text
+    assert "FD-0000123456" in reg                                 # INST-42 deposit
+    inst77 = [k for k, v in FD.items() if db().execute("SELECT institution_id FROM fdrs WHERE id=?", (k,)).fetchone()
+              and db().execute("SELECT institution_id FROM fdrs WHERE id=?", (k,)).fetchone()[0] == "INST-77"]
+    assert inst77
+    for fid in inst77:
+        assert FD[fid] not in reg
+        assert ro.get(f"/fdrs/{fid}").status_code == 404
+    assert S("officer").get(f"/fdrs/{inst77[0]}").status_code == 200  # headquarters sees every region
+    assert ro.post("/fdrs/FDR-001/decide", action="accept", evidence_id="1").status_code == 403  # view-only role

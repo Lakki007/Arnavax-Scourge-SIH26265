@@ -254,7 +254,7 @@ pointer(s3, L, 1.22, 8, "Technologies to be used")
 stack = [("FaFingerprint", VIO, "Proof layer", "TLSNotary MPC-TLS · Rust", "Selective disclosure · rustls"),
          ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "AES-GCM vault · hash-chained audit"),
          ("FaCode", MINT, "Frontend", "Server-rendered HTML · JS", "Live 3-party proof view"),
-         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "254 tests · 2FA · audits")]
+         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "266 tests · 2FA · audits")]
 cw4 = (CW - 3 * 0.2) / 4
 for i, (ic, col, head, l1, l2) in enumerate(stack):
     x = L + i * (cw4 + 0.2)
@@ -319,8 +319,8 @@ title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
          ("FaGlobe", SKY, "Real bank", "live split-key session", "HTTP 200 in 1.0 s · first bank: SBI"),
-         ("FaVial", MINT, "254 / 254", "automated tests pass", "incl. lien wording, rollback, forgery tests"),
-         ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
+         ("FaVial", MINT, "266 / 266", "automated tests pass", "incl. rollback, forgery, backup-restore"),
+         ("FaCoins", AMBER, "₹0", "software licences", "357 MB/proof · see FEASIBILITY.md")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
     rect(s4, x, 1.65, cw4, 1.3, fill=WHITE, line=LINE, r=0.1, lw=1.25)
@@ -337,9 +337,9 @@ tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
-risks = [("Bank page hides liens, or bytes are withheld", "Fallbacks: bank-signed e-advice, then branch confirmation; never a guess"),
+risks = [("Bank page can't be proven, or hides the lien", "3-tier fallback: bank-signed e-advice, then branch; never a guess"),
          ("Fake bank site or a replayed old proof", "Rejected: bank certificate + single-use, 15-min challenge"),
-         ("Proof of a different FD, or an edited screen", "Rejected / no effect: FD bound to challenge; proof covers bank bytes"),
+         ("Bank terms, consent and data protection", "Own login, per-deposit consent, record-only disclosure; legal review"),
          ("Bank encrypts data inside HTTPS, or ties it to the browser", "Browser-extension prover; verifier gets the per-session app key")]
 ry = 4.13
 for r_, s_ in risks:
@@ -353,7 +353,7 @@ for r_, s_ in risks:
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
 tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("PILOT PLAN  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("✓ Prototype, 254 tests  →  ✓ Live real-bank session  →  ", {"s": 10.5, "b": True, "c": MINT}),
+   ("✓ Prototype, 266 tests  →  ✓ Live real-bank session  →  ", {"s": 10.5, "b": True, "c": MINT}),
    ("FD pages at 3 large banks  →  1 AICTE regional office  →  National rollout", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
@@ -442,7 +442,7 @@ q = rect(s6, L + 0.2, 5.55, 1.08, 1.08, fill=WHITE, r=0.08)
 qp6 = s6.shapes.add_picture(IMG + "qr_dark.png", Inches(L + 0.25), Inches(5.6), Inches(0.98), Inches(0.98)); qp6.click_action.hyperlink.address = DEMO_HREF
 tx(s6, L + 1.45, 5.5, 4.7, 1.2, [[("PROJECT RESOURCES", {"f": H, "b": True, "s": 11, "c": MINT, "after": 3})],
    [("Demo video (90 s): ", {"b": True, "s": 9.5, "c": WHITE}), (DEMO_URL, {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
-   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 254 / 254 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
+   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 266 / 266 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
    [("Code + evidence: ", {"b": True, "s": 9.5, "c": WHITE}), ("github.com/Lakki007/Arnavax-Scourge-SIH26265", {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # comparison table (hero)

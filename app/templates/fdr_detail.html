@@ -91,10 +91,28 @@
 {% if b.release_request %}{% set rr = b.release_request %}
 <section class="panel" id="release" style="margin-top:20px;padding:20px">
   <h2 style="margin-top:0">Release: clearances and signatures</h2>
-  <p class="muted small">Proposed by {{ rr.proposed_by }}: “{{ rr.note }}”. Every department must clear; {{ b.signers_needed }} officer signature{{ 's' if b.signers_needed > 1 }} needed besides the proposer{% if b.signers_needed > 1 %} (₹1 crore or more){% endif %}.</p>
+  <p class="small" id="rel-type-line"><b>{{ b.release_type.label }}</b> · needs clearance from {% for d in b.release_type.departments %}{{ DEPTS[d] }}{% if not loop.last %}, {% endif %}{% endfor %}{% if b.release_type.documents %} · documents: {% for k in b.release_type.documents %}{% set have = b.documents|selectattr('kind','equalto',k)|list %}<span class="{{ 'st st-confirmed' if have else 'st st-insufficient' }}">{{ VAULT_KINDS[k] }}{{ ' ✓' if have else ' missing' }}</span>{% if not loop.last %} {% endif %}{% endfor %}{% endif %}</p>
+  <p class="muted small">Proposed by {{ rr.proposed_by }}: “{{ rr.note }}”. Every required department must clear; {{ b.signers_needed }} officer signature{{ 's' if b.signers_needed > 1 }} needed besides the proposer{% if b.signers_needed > 1 %} (₹1 crore or more){% endif %}.</p>
   <div class="table-wrap"><table><thead><tr><th>Department</th><th>Decision</th></tr></thead><tbody>
-  {% for dk, dl in DEPTS.items() %}{% set c = b.clearances.get(dk) %}<tr id="clr-{{ dk }}"><td>{{ dl }}</td><td>{% if c %}<span class="st {{ 'st-confirmed' if c.decision == 'clear' else 'st-discrepancy' }}">{{ 'Cleared' if c.decision == 'clear' else 'Objection' }}</span> <span class="muted small">by {{ c.officer }}{% if c.note %}: {{ c.note }}{% endif %}</span>{% else %}<span class="muted small">pending</span>{% endif %}</td></tr>{% endfor %}
+  {% for dk, dl in DEPTS.items() if dk in b.release_type.departments or dk in b.clearances %}{% set c = b.clearances.get(dk) %}<tr id="clr-{{ dk }}"><td>{{ dl }}</td><td>{% if c %}<span class="st {{ 'st-confirmed' if c.decision == 'clear' else 'st-discrepancy' }}">{{ 'Cleared' if c.decision == 'clear' else 'Objection' }}</span> <span class="muted small">by {{ c.officer }}{% if c.note %}: {{ c.note }}{% endif %}</span>{% else %}<span class="muted small">pending</span>{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>
+  <h3 style="margin:16px 0 6px">Settlement</h3>
+  <div class="table-wrap"><table id="settlement"><thead><tr><th>Claim</th><th>Payee</th><th>Basis</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>
+  <tr><td colspan="3">Deposit principal</td><td style="text-align:right">{{ paise_inr(b.settlement.principal_paise) }}</td><td></td></tr>
+  {% for d in b.deductions %}<tr><td>{{ DED_KINDS[d.kind] }}</td><td>{{ d.payee }}</td><td class="small">{{ d.basis }} <span class="muted">({{ d.added_by }})</span></td><td style="text-align:right">− {{ paise_inr(d.amount_paise) }}</td>
+    <td>{% if s.role == 'officer' and s.who in DEDUCTERS and rr.state == 'pending' %}<form method="post" action="/fdrs/{{ f.id }}/release/deduction/{{ d.id }}/remove" class="actions"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input name="reason" required minlength="10" placeholder="Reason for removing" style="width:150px"><button class="btn btn-ghost btn-sm">Remove</button></form>{% endif %}</td></tr>{% endfor %}
+  <tr><td colspan="3"><b>Refund to the institution</b></td><td style="text-align:right" id="refund"><b>{{ paise_inr(b.settlement.refund_to_institution_paise) }}</b></td><td></td></tr>
+  </tbody></table></div>
+  <p class="muted small">Claims are paid to the payees from the deposit before the balance is refunded. The settlement is part of the signed instruction; changing it withdraws signatures already given.</p>
+  {% if s.role == 'officer' and s.who in DEDUCTERS and rr.state == 'pending' %}
+  <form method="post" action="/fdrs/{{ f.id }}/release/deduction" class="actions" id="ded-form" style="align-items:flex-end">
+    <input type="hidden" name="csrf" value="{{ s.csrf }}">
+    <div class="field" style="margin:0"><label for="ded-kind">Claim</label><select id="ded-kind" name="kind">{% for k, l in DED_KINDS.items() %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></div>
+    <div class="field" style="margin:0"><label for="ded-payee">Payee</label><input id="ded-payee" name="payee" required minlength="3" placeholder="e.g. 214 students, B.Tech 2025 batch"></div>
+    <div class="field" style="margin:0"><label for="ded-amt">Amount (₹)</label><input id="ded-amt" name="amount" required inputmode="decimal" placeholder="125000"></div>
+    <div class="field" style="margin:0"><label for="ded-basis">Basis</label><input id="ded-basis" name="basis" required minlength="10" placeholder="e.g. PGRC order 14/2026, list attached"></div>
+    <button class="btn btn-quiet btn-sm">Add claim</button>
+  </form>{% endif %}
   <p class="small" style="margin-top:10px">Signatures: {% for a in b.approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% else %}none yet{% endfor %} ({{ b.approvals|length }} of {{ b.signers_needed }}).</p>
   {% if b.stale_approvals %}<p class="note note-warn small" id="stale-signatures"><b>Signatures withdrawn automatically:</b> {% for a in b.stale_approvals %}{{ a.officer }}{% if not loop.last %}, {% endif %}{% endfor %} signed before the case changed (evidence, clearances, documents, hold or amount). They must sign again.</p>{% endif %}
   {% if s.role == 'officer' %}{% set mydept = OFFICER_DEPT.get(s.who) %}
@@ -237,6 +255,8 @@
   <p class="muted small">Maker-checker: a second officer must approve before the deposit is released. Approval is allowed only while an accepted bank-session confirmation from the last {{ DEMO.confirmation_valid_days }} days is current.</p>
   <form method="post" action="/fdrs/{{ f.id }}/decide">
     <input type="hidden" name="csrf" value="{{ s.csrf }}"><input type="hidden" name="action" value="release"><input type="hidden" name="evidence_id" value="{{ latest.id }}">
+    <div class="field"><label for="rel-type">Reason for release</label><select id="rel-type" name="release_type">{% for k, t in REL_TYPES.items() %}<option value="{{ k }}">{{ t.label }}</option>{% endfor %}</select>
+      <span class="muted small">Each reason has its own required clearances and documents.</span></div>
     <div class="field"><label for="rel-note">Release order reference (at least 10 characters)</label><textarea id="rel-note" name="note" rows="2" minlength="10" required placeholder="e.g. RB/REL/2026/0142, 10-year term completed"></textarea></div>
     <div class="actions"><button class="btn btn-solid">Propose release</button><button class="btn btn-ghost" type="button" data-close>Cancel</button></div>
   </form>

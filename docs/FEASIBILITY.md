@@ -55,7 +55,7 @@ Inputs: ~357 MB prover↔verifier traffic and ~1 s per proof (real-bank run); 2 
 
 ## 5. Pilot path
 
-1. ✓ Prototype with the full lifecycle and automated tests.
+1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 266 automated tests.
 2. ✓ Live real-bank MPC-TLS session (first bank tested: SBI).
 3. Browser-extension prover → FD data proven at 3 large banks. [Open]
 4. One AICTE regional office, tiers 1–3 together, against its current register. [Open]

@@ -38,6 +38,9 @@ Every row is enforced server-side and has an automated test. File paths are rela
 | Issued is not completed; completion needs a matching, new bank acknowledgement | `COMPLETERS` | `test_c01`–`test_c06`, `test_acknowledgement_must_name_case_or_be_attested` |
 | Adverse bank evidence after issue blocks completion; stale confirmation blocks approval | gates | `test_adverse_bank_evidence_after_issue_blocks_completion`, `test_stale_confirmation_blocks_release` |
 | One outstanding instruction; revoke shows on public verification | `/release/revoke`, `/verify` | `test_one_outstanding_release_and_revoke_to_supersede`, `test_revoked_letter_fails_public_verification` |
+| Release type decides required departments and documents; approval blocked until present | `release.types` in `config/deposit_rules.json`, `action_gates` | `test_l01`–`test_l03` |
+| Claims against the deposit: only scrutiny or Finance record them, in integer paise, never above the deposit; settlement signed into the instruction; any change withdraws signatures | `/release/deduction`, `settlement()` | `test_l04`–`test_l06` |
+| Regional officers see only their region (404 elsewhere) | `OFFICER_REGION`, `can_see_fdr()` | `test_l07_regional_officer_sees_only_its_region` |
 | Release letter signed (Ed25519), verifiable offline and by QR | release signing key | `test_release_letter_is_signed_and_verifiable_offline`, `test_release_letter_qr_and_public_verify` |
 
 ## Data protection and integrity

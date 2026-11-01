@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS release_requests(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER NOT NULL,
   proposed_by TEXT NOT NULL, proposed_at REAL NOT NULL, note TEXT NOT NULL,
   state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected','withdrawn','revoked')),
-  decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT, signed_json TEXT, signature TEXT);
+  decided_by TEXT, decided_at REAL, decision_note TEXT, letter_no TEXT, signed_json TEXT, signature TEXT,
+  release_type TEXT NOT NULL DEFAULT 'term_completed');
 CREATE TABLE IF NOT EXISTS eadvices(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL REFERENCES fdrs(id), evidence_id INTEGER,
   uploaded_at REAL NOT NULL, actor TEXT NOT NULL, ok INTEGER NOT NULL, reason TEXT, fields_json TEXT NOT NULL,
@@ -66,6 +67,10 @@ CREATE TABLE IF NOT EXISTS release_clearances(
 CREATE TABLE IF NOT EXISTS accounts(
   username TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('officer','institution')), institution_id TEXT, officer TEXT,
   salt TEXT NOT NULL, pw_hash TEXT NOT NULL, created_at REAL NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS release_deductions(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), kind TEXT NOT NULL,
+  payee TEXT NOT NULL, amount_paise INTEGER NOT NULL CHECK(amount_paise > 0), basis TEXT NOT NULL,
+  added_by TEXT NOT NULL, at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS release_approvals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, release_id INTEGER NOT NULL REFERENCES release_requests(id), officer TEXT NOT NULL,
   at REAL NOT NULL, fp TEXT, UNIQUE(release_id, officer, fp));
@@ -121,6 +126,8 @@ def _migrate(c):
     for col in ("signed_json", "signature"):
         if col not in rcols:
             c.execute(f"ALTER TABLE release_requests ADD COLUMN {col} TEXT")
+    if "release_type" not in rcols:
+        c.execute("ALTER TABLE release_requests ADD COLUMN release_type TEXT NOT NULL DEFAULT 'term_completed'")
     if "fp" not in {r[1] for r in c.execute("PRAGMA table_info(release_approvals)")}:
         c.execute("ALTER TABLE release_approvals ADD COLUMN fp TEXT")
     ncols = {r[1] for r in c.execute("PRAGMA table_info(notifications)")}

@@ -77,7 +77,7 @@ python3 -m pytest -q tests/test_policy.py tests/test_units.py tests/test_backup.
 
 pip install -r requirements-dev.txt && python3 -m playwright install chromium
 ./scripts/run.sh &                                  # acceptance and browser tests drive the running app
-python3 -m pytest -q tests/                         # full suite: 259 pass, 2 skipped (deployment access-code gate)
+python3 -m pytest -q tests/                         # full suite: 266 pass, 2 skipped (deployment access-code gate)
 python3 scripts/shots.py var/shots                  # screenshots of every page, desktop and mobile; reports console errors and 5xx
 ```
 
@@ -94,7 +94,8 @@ Without Playwright installed, the browser-journey file is skipped instead of fai
 | Bank | **Synthetic** mock server; test CA |
 | Prover location | **Demo**: on the server with a mock session (real use: the CLI command shown on the challenge page) |
 | Sign-in | Named accounts (scrypt, lockout), **2FA mandatory for officers** in `SCOURGE_AUTH=password`; demo mode adds a role chooser for judges |
-| Release | Department clearances with memos, two-officer atomic approval, signed letter with QR verification, bank acknowledgement, revoke |
+| Release | Four release types (term completed, closure, merger, conversion), each with its own required clearances and documents; claims against the deposit (student refunds, staff dues, penalties) and refund calculated in paise and signed into the instruction; department clearances with memos, two-officer atomic approval, QR-verifiable letter, bank acknowledgement, revoke |
+| Regional scoping | Regional officers see only institutions in their region; headquarters sees all |
 | Backup and recovery | Online backup, checksummed archive, verified restore (`scripts/backup.py`) |
 | Live real-bank MPC-TLS session | **Real** (first bank tested: SBI; transport, certificate and timing) |
 | Account / FD data proven at a real bank | **Not yet** (needs the browser-extension prover; fallback in FEASIBILITY.md) |

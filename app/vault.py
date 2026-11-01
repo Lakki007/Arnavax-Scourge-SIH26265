@@ -23,7 +23,9 @@ VAULT = VAR / "vault"
 VAULT.mkdir(parents=True, exist_ok=True)
 MAX_BYTES = 2 * 1024 * 1024
 KINDS = {"fdr_receipt": "FDR receipt", "bank_letter": "Bank letter / e-advice", "renewal": "Renewal advice",
-         "clearance_memo": "Department clearance memo", "bank_acknowledgement": "Bank acknowledgement of release", "other": "Other"}
+         "clearance_memo": "Department clearance memo", "bank_acknowledgement": "Bank acknowledgement of release",
+         "closure_order": "Closure order / approval withdrawal", "dues_statement": "Statement of student and staff dues",
+         "merger_order": "Merger approval order", "conversion_order": "Conversion approval order", "other": "Other"}
 PDF_BAD = (b"/JavaScript", b"/JS", b"/Launch", b"/EmbeddedFile", b"/RichMedia", b"/Encrypt", b"/XFA")
 
 

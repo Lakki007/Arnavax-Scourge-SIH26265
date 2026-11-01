@@ -52,6 +52,9 @@ def ago(t):
     return f"{int(d // 86400)} days ago"
 
 
+T.env.filters["fromjson"] = json.loads
+T.env.globals.update(REL_TYPES=lifecycle.RULES["release"]["types"], DED_KINDS=lifecycle.RULES["release"]["deduction_kinds"],
+                     DEDUCTERS={"RB-01", "FN-01"}, paise_inr=lambda p: "\u20b9" + views.inr(f"{p / 100:.2f}").lstrip("\u20b9"))
 T.env.globals.update(OFFICER_DEPT=auth.OFFICER_DEPT, OFFICERS=auth.OFFICERS, VAULT_KINDS=vault.KINDS, DEPTS=lifecycle.RULES['release']['departments'], inr=inr, when=when, ago=ago, LABEL=policy.LABEL, DEMO=DEMO, BEHAVIOURS=seed.BEHAVIOURS, DEMO_ALLOW=VERIFIER_CFG["allow_hosts"])
 T.env.filters["fromjson"] = json.loads
 
@@ -111,10 +114,30 @@ def fdr_bundle(fid, _depth=0):
         b["stale_approvals"] = [a for a in allapp if a.get("fp") not in (None, b["release_fp"])]
         b["release_version"] = f"{b['release_fp']}:{len(b['approvals'])}"
         b["signers_needed"] = 2 if float(f["principal"]) >= lifecycle.RULES["release"]["second_signer_from_rupees"] else 1
+        b["release_type"] = lifecycle.RULES["release"]["types"].get(rel.get("release_type") or "term_completed")
+        b["deductions"] = db.q("SELECT * FROM release_deductions WHERE release_id=? ORDER BY id", (rel["id"],))
+        b["settlement"] = settlement(f, b["deductions"])
     b["eadvice"] = eadvice_state(b)
     b["branch"] = db.q1("SELECT * FROM branch_requests WHERE fdr_id=? ORDER BY created_at DESC", (fid,))
     b["documents"] = db.q("SELECT id, kind, filename, mime, size, sha256, uploaded_by, uploaded_at FROM documents WHERE fdr_id=? ORDER BY id DESC", (fid,))
     return b
+
+
+def paise(rupees) -> int:
+    """'750000', '750000.5', '7,50,000.50' -> integer paise. Raises ValueError on anything else."""
+    t = str(rupees).replace(",", "").strip()
+    if not re.fullmatch(r"\d{1,13}(\.\d{1,2})?", t):
+        raise ValueError(rupees)
+    whole, _, frac = t.partition(".")
+    return int(whole) * 100 + int((frac + "00")[:2])
+
+
+def settlement(f, deductions):
+    """Refund calculation, all in integer paise: principal minus every recorded claim. Never negative."""
+    total = paise(f["principal"])
+    claims = sum(d["amount_paise"] for d in deductions)
+    return {"principal_paise": total, "deductions_paise": claims, "refund_to_institution_paise": total - claims,
+            "lines": [{"kind": d["kind"], "payee": d["payee"], "amount_paise": d["amount_paise"], "basis": d["basis"]} for d in deductions]}
 
 
 def release_fingerprint(f, rel, clearances, hold):
@@ -123,7 +146,9 @@ def release_fingerprint(f, rel, clearances, hold):
     docs = db.q("SELECT id, sha256 FROM documents WHERE fdr_id=? ORDER BY id", (f["id"],))
     material = {"evidence": rel["evidence_id"], "principal": f["principal"], "hold": hold["id"] if hold else None,
                 "clearances": sorted((d, c["decision"]) for d, c in clearances.items()),
-                "documents": [(d["id"], d["sha256"]) for d in docs]}
+                "documents": [(d["id"], d["sha256"]) for d in docs], "type": rel.get("release_type") or "term_completed",
+                "deductions": [(d["id"], d["kind"], d["payee"], d["amount_paise"], d["basis"])
+                               for d in db.q("SELECT * FROM release_deductions WHERE release_id=? ORDER BY id", (rel["id"],))]}
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
@@ -169,7 +194,7 @@ def get_fdr_or_404(s, fid):
 
 def all_rows(s):
     if s["role"] == "officer":
-        ids = [r["id"] for r in db.q("SELECT id FROM fdrs ORDER BY id")]
+        ids = [r["id"] for r in db.q("SELECT id, institution_id FROM fdrs ORDER BY id") if auth.can_see_fdr(s, r)]
     else:
         ids = [r["id"] for r in db.q("SELECT id FROM fdrs WHERE institution_id=? ORDER BY id", (s["inst"],))]
     return [fdr_bundle(i) for i in ids]
@@ -424,7 +449,7 @@ def _renewable(s):
     """FDRs that can be renewed: not released and not already renewed."""
     rows = db.q("SELECT f.id, f.fd_number, f.institution_id, f.maturity FROM fdrs f WHERE f.released_at IS NULL "
                 "AND NOT EXISTS (SELECT 1 FROM fdrs g WHERE g.renews_fdr_id=f.id) ORDER BY f.id")
-    return [r for r in rows if s["role"] == "officer" or r["institution_id"] == s["inst"]]
+    return [r for r in rows if auth.can_see_fdr(s, r)]
 
 
 def _insts_for(s):
@@ -581,13 +606,20 @@ def action_gates(b):
             g["approve"] = (False, f"The bank confirmation is no longer current ({b['base_status'][1]}). Reject, or request a fresh proof.")
         else:
             depts = lifecycle.RULES["release"]["departments"]
+            rt = b.get("release_type") or lifecycle.RULES["release"]["types"]["term_completed"]
             cl = b.get("clearances", {})
             objected = [d for d, c in cl.items() if c["decision"] == "object"]
-            missing = [d for d in depts if d not in cl]
+            missing = [d for d in rt["departments"] if d not in cl]
+            have = {d["kind"] for d in b["documents"]}
+            missing_docs = [k for k in rt["documents"] if k not in have]
             if objected:
                 g["approve"] = (False, f"Objection from {', '.join(depts[d] for d in objected)}. Reject the proposal or resolve the objection.")
             elif missing:
                 g["approve"] = (False, f"Waiting for clearance from {', '.join(depts[d] for d in missing)}.")
+            elif missing_docs:
+                g["approve"] = (False, f"{rt['label']} needs: {', '.join(vault.KINDS[k] for k in missing_docs)}. Upload it to the case first.")
+            elif b["settlement"]["refund_to_institution_paise"] < 0:
+                g["approve"] = (False, "Recorded claims exceed the deposit. Correct the deductions before approval.")
             else:
                 g["approve"] = (True, "")
     g["withdraw"] = (True, "") if challenge_live(b["open"]) else (False, "No open challenge.")
@@ -628,7 +660,8 @@ def withdraw(request: Request, fid: str, csrf: str = Form("")):
 
 
 @app.post("/fdrs/{fid}/decide")
-def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(...), evidence_id: int = Form(...), note: str = Form("")):
+def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(...), evidence_id: int = Form(...), note: str = Form(""),
+           release_type: str = Form("term_completed")):
     s = officer_post(request, csrf)
     if auth.officer_id(s) not in auth.PROPOSERS:
         raise HTTPException(403, "Only the scrutiny officer accepts, escalates or proposes a release.")
@@ -648,9 +681,11 @@ def decide(request: Request, fid: str, csrf: str = Form(""), action: str = Form(
     who = auth.officer_id(s)
     if action == "release":
         # Maker step only. Money moves after a second officer approves (see /release/approve).
-        db.x("INSERT INTO release_requests(fdr_id,evidence_id,proposed_by,proposed_at,note,state) VALUES(?,?,?,?,?,?)",
-             (fid, latest["id"], who, now, note[:500], "pending"))
-        db.event(f"officer:{who}", "release_proposed", fid, evidence_id=latest["id"], note=note[:500])
+        if release_type not in lifecycle.RULES["release"]["types"]:
+            raise HTTPException(422, "Choose the reason for release: " + ", ".join(lifecycle.RULES["release"]["types"]))
+        db.x("INSERT INTO release_requests(fdr_id,evidence_id,proposed_by,proposed_at,note,state,release_type) VALUES(?,?,?,?,?,?,?)",
+             (fid, latest["id"], who, now, note[:500], "pending", release_type))
+        db.event(f"officer:{who}", "release_proposed", fid, evidence_id=latest["id"], note=note[:500], release_type=release_type)
         return RedirectResponse(f"/fdrs/{fid}", 303)
     ea = b.get("eadvice")
     if action == "accept" and latest["decision"] != "verified" and ea:
@@ -711,6 +746,7 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
                   "bank_host": f["bank_host"], "institution_id": f["institution_id"], "principal": f["principal"],
                   "proposed_by": rel["proposed_by"], "approved_by": who, "signed_by": approvers,
                   "clearances": sorted(b["clearances"]), "bank_proof_evidence_id": rel["evidence_id"], "case_fingerprint": b["release_fp"],
+                  "release_type": rel.get("release_type") or "term_completed", "settlement": b["settlement"],
                   "approved_at": int(now)}
         signed_json = json.dumps(signed, sort_keys=True, separators=(",", ":"))
         signature = base64.b64encode(AICTE_SIGNING_KEY.sign(signed_json.encode())).decode()
@@ -729,6 +765,66 @@ def release_approve(request: Request, fid: str, csrf: str = Form(""), note: str 
         return True
     issued = db.tx(work)
     return RedirectResponse(f"/fdrs/{fid}?issued=1" if issued else f"/fdrs/{fid}", 303)
+
+
+DEDUCTERS = {"RB-01", "FN-01"}   # scrutiny officer and Finance record claims; approvers only review them
+
+
+@app.post("/fdrs/{fid}/release/deduction")
+def release_deduction(request: Request, fid: str, csrf: str = Form(""), kind: str = Form(""), payee: str = Form(""),
+                      amount: str = Form(""), basis: str = Form("")):
+    """Record a claim against the deposit (student refund, staff dues, penalty...). Allowed only while the
+    release is pending; every change invalidates signatures already given (it is part of the case fingerprint)."""
+    s = officer_post(request, csrf)
+    who = auth.officer_id(s)
+    if who not in DEDUCTERS:
+        raise HTTPException(403, "Only the scrutiny officer or Finance can record a claim against the deposit.")
+    b = get_fdr_or_404(s, fid)
+    rel = b["release_request"]
+    if not rel:
+        raise HTTPException(409, "Propose a release first; claims are settled as part of it.")
+    kinds = lifecycle.RULES["release"]["deduction_kinds"]
+    if kind not in kinds:
+        raise HTTPException(422, "Choose a claim type: " + ", ".join(kinds))
+    payee, basis = payee.strip(), basis.strip()
+    if not (3 <= len(payee) <= 120) or not (10 <= len(basis) <= 300):
+        raise HTTPException(422, "Name the payee (3-120 characters) and the basis of the claim (10-300 characters, e.g. the order or list).")
+    try:
+        amt = paise(amount)
+    except ValueError:
+        raise HTTPException(422, "Enter the amount in rupees, e.g. 125000 or 125000.50.")
+    if amt <= 0:
+        raise HTTPException(422, "The amount must be more than zero.")
+
+    def work(c):
+        cur = sum(r[0] for r in c.execute("SELECT amount_paise FROM release_deductions WHERE release_id=?", (rel["id"],)))
+        if cur + amt > paise(b["f"]["principal"]):
+            raise HTTPException(409, f"Claims would exceed the deposit ({inr(b['f']['principal'])}). Recorded so far: \u20b9{cur / 100:,.2f}.")
+        if c.execute("SELECT state FROM release_requests WHERE id=?", (rel["id"],)).fetchone()[0] != "pending":
+            raise HTTPException(409, "The release is no longer pending.")
+        c.execute("INSERT INTO release_deductions(release_id,kind,payee,amount_paise,basis,added_by,at) VALUES(?,?,?,?,?,?,?)",
+                  (rel["id"], kind, payee, amt, basis, who, time.time()))
+        db.event_in(c, f"officer:{who}", "release_deduction_added", fid, release=rel["id"], claim=kind, payee=payee, amount_paise=amt, basis=basis)
+    db.tx(work)
+    return RedirectResponse(f"/fdrs/{fid}#release", 303)
+
+
+@app.post("/fdrs/{fid}/release/deduction/{did}/remove")
+def release_deduction_remove(request: Request, fid: str, did: int, csrf: str = Form(""), reason: str = Form("")):
+    s = officer_post(request, csrf)
+    who = auth.officer_id(s)
+    if who not in DEDUCTERS:
+        raise HTTPException(403, "Only the scrutiny officer or Finance can change claims.")
+    b = get_fdr_or_404(s, fid)
+    rel = b["release_request"]
+    if not rel or not any(d["id"] == did for d in b["deductions"]):
+        raise HTTPException(404, "No such claim on the pending release.")
+    if len(reason.strip()) < 10:
+        raise HTTPException(422, "Give a reason of at least 10 characters for removing a claim.")
+    d = next(d for d in b["deductions"] if d["id"] == did)
+    db.x("DELETE FROM release_deductions WHERE id=? AND release_id=?", (did, rel["id"]))
+    db.event(f"officer:{who}", "release_deduction_removed", fid, release=rel["id"], removed=dict(d), reason=reason.strip()[:300])
+    return RedirectResponse(f"/fdrs/{fid}#release", 303)
 
 
 @app.post("/internal/fault")
@@ -1254,7 +1350,7 @@ def mockbank_page(request: Request):
         for d in c["deposits"]:
             rows.append({"cust": cid, "cust_name": c["name"], "d": d, "reg": regs.get(d["fd_number"])})
     on_bank = {d["fd_number"] for c in st["customers"].values() for d in c["deposits"]}
-    missing = [r for r in regs.values() if r["fd_number"] not in on_bank and (s["role"] == "officer" or r["institution_id"] == s["inst"])]
+    missing = [r for r in regs.values() if r["fd_number"] not in on_bank and auth.can_see_fdr(s, r)]
     return render(request, "mockbank.html", s, rows=rows, missing=missing)
 
 
