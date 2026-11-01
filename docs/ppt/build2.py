@@ -303,7 +303,7 @@ for lab, col in [("Verified", MINT), ("Discrepancy", CORAL), ("Insufficient evid
 # hero: video card
 vx, vy, vw, vh = 9.05, 2.85, R - 9.05, 3.92
 rect(s3, vx, vy, vw, vh, fill=INK, r=0.06)
-tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE DEMO (100 s)", {"f": H, "b": True, "s": 11, "c": MINT})]])
+tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE 3-MINUTE DEMO", {"f": H, "b": True, "s": 11, "c": MINT})]])
 mw = vw - 0.5; mh = mw * 9 / 16
 mv = s3.shapes.add_movie(VIDEO, Inches(vx + 0.25), Inches(vy + 0.6), Inches(mw), Inches(mh), poster_frame_image=POSTER, mime_type="video/mp4")
 mv.name = "Demo video"
@@ -311,14 +311,14 @@ qy = vy + 0.6 + mh + 0.2
 qr = rect(s3, vx + 0.25, qy, 1.05, 1.05, fill=WHITE, r=0.08)
 qp = s3.shapes.add_picture(IMG + "qr_dark.png", Inches(vx + 0.3), Inches(qy + 0.05), Inches(0.95), Inches(0.95)); qp.click_action.hyperlink.address = DEMO_HREF
 tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Click to play here, or scan / click the QR for YouTube", {"s": 9.5, "b": True, "c": WHITE, "after": 3})],
-                                        [("Synthetic bank + live SBI session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
+                                        [("Synthetic bank + live real-bank session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 4  FEASIBILITY
 s4 = S[3]; frame(s4)
 title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
-         ("FaGlobe", SKY, "SBI live", "live split-key session, SBI API", "HTTP 200 in 1.0 s · 30 Oct 2026"),
+         ("FaGlobe", SKY, "Real bank", "live split-key session", "HTTP 200 in 1.0 s · first bank: SBI"),
          ("FaVial", MINT, "254 / 254", "automated tests pass", "incl. lien wording, rollback, forgery tests"),
          ("FaCoins", AMBER, "₹0", "software licences", "one small server [estimate]")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
@@ -331,9 +331,9 @@ for i, (ic, col, big, lab, note) in enumerate(tiles):
 # live real-bank run (replaces the generic feasibility ticks with evidence)
 rect(s4, L, 3.06, CW, 0.56, fill=INK, r=0.2)
 icon(s4, "FaBuildingColumns", L + 0.14, 3.15, 0.38, MINT, pad=0.22)
-tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("SBI · 30 Oct 2026 · own account", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("First bank tested: SBI · 30 Oct 2026", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":1.0}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
-   [("Split-key session with SBI's production net-banking API; cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+   [("Split-key session with a bank's production net-banking API; cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
@@ -353,7 +353,7 @@ for r_, s_ in risks:
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
 tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("PILOT PLAN  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("✓ Prototype, 254 tests  →  ✓ Live SBI session (30 Oct)  →  ", {"s": 10.5, "b": True, "c": MINT}),
+   ("✓ Prototype, 254 tests  →  ✓ Live real-bank session  →  ", {"s": 10.5, "b": True, "c": MINT}),
    ("FD pages at 3 large banks  →  1 AICTE regional office  →  National rollout", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
@@ -378,7 +378,7 @@ pill(s5, L, 3.42, lw_, 0.36, "TODAY", CORAL, size=10.5, font=H)
 pill(s5, L + lw_ + gap_, 3.42, lw_, 0.36, "WITH SCOURGE", MINT, size=10.5, font=H)
 pairs = [("Branch letter or uploaded screenshot", "The bank's own server, proven"),
          ("Checked once, trusted for 10 years", "Re-checked any time, before every release"),
-         ("Weeks per confirmation", "0.58 s per proof (synthetic); 1.0 s live SBI session"),
+         ("Weeks per confirmation", "0.58 s per proof (synthetic); 1.0 s live bank session"),
          ("Hidden loans found at release, or never", "Pledge checked at the bank; two-officer release")]
 py = 3.88
 for a_, b2 in pairs:
@@ -474,12 +474,12 @@ for i, (f_, vals) in enumerate(feat, 1):
     cell(tb_.cell(i, 0), f_, SOFT, INK, 9, align=PP_ALIGN.LEFT)
     for j, v in enumerate(vals, 1):
         if v == "n":
-            cell(tb_.cell(i, j), "SBI session; FD next", VIO_T, VIO, 8)
+            cell(tb_.cell(i, j), "Live bank session; FD next", VIO_T, VIO, 8)
         else:
             cell(tb_.cell(i, j), v, VIO_T if j == 5 else WHITE, MINT if v == "✓" else CORAL if v == "✕" else AMBER, 15)
     tb_.rows[i].height = Inches(0.62)
 tb_.rows[0].height = Inches(0.62)
-tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with SBI's API done (30 Oct 2026); FD-page proof is roadmap step 1.", {"s": 9.5, "i": True, "c": GREY})]])
+tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with a real bank done (SBI, 30 Oct 2026); FD-page proof is roadmap step 1.", {"s": 9.5, "i": True, "c": GREY})]])
 
 for sl in prs.slides:
     for sh in sl.shapes:
