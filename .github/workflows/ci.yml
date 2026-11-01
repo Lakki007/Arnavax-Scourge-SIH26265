@@ -40,8 +40,10 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -r requirements.txt pytest httpx
-      - run: python -m pytest -q --collect-only tests > /dev/null
-      - run: python -m pytest -q tests/test_units.py tests/test_policy.py tests/test_backup.py
+      - run: SCOURGE_NO_AUTOSTART=1 python -m pytest -q --collect-only tests > /dev/null
+      - run: SCOURGE_NO_AUTOSTART=1 python -m pytest -q tests/test_units.py tests/test_policy.py tests/test_backup.py
+      - name: The whole suite from a cold start, exactly as a reviewer runs it (conftest starts the portal)
+        run: python -m pytest -q tests
 
   container:
     runs-on: ubuntu-24.04

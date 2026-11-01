@@ -5,6 +5,7 @@
 services:
   scourge:
     build: .
+    platform: linux/amd64        # the image ships Linux x86-64 proof binaries; Apple Silicon runs it via emulation
     ports: ["8000:8000"]
     environment:
       SCOURGE_ACCESS_CODE: ${SCOURGE_ACCESS_CODE:-}
@@ -21,6 +22,7 @@ services:
 
   backup:
     build: .
+    platform: linux/amd64        # the image ships Linux x86-64 proof binaries; Apple Silicon runs it via emulation
     profiles: ["ops"]
     volumes: ["scourge-var:/srv/scourge/var", "./backups:/backups"]
     entrypoint: ["sh", "-c", "f=/backups/scourge-$$(date +%Y%m%d-%H%M%S).tar.gz && python3 scripts/backup.py create $$f && python3 scripts/backup.py verify $$f"]

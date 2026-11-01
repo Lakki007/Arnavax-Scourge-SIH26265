@@ -17,5 +17,11 @@ for f in bsp/prove bsp/verifierd bsp/challenge bsp/mockbank fdr/fdr_proof fdr/re
 cp "$HERE/rust/Cargo.lock" Cargo.lock
 cargo build --release --example scourge_prove --example scourge_verifierd --example scourge_mockbank --example real_bank_probe
 cargo test --release --example scourge_verifierd   # JSON span-parser unit tests
-cp target/release/examples/scourge_{prove,verifierd,mockbank} target/release/examples/real_bank_probe "$HERE/bin/"
-echo "binaries copied to $HERE/bin"
+# Linux x86-64 builds go to bin/ (what the repo ships); every other platform gets its own folder, e.g. bin/darwin-arm64,
+# so the Linux binaries are never overwritten. The app picks the right folder automatically (app/settings.py).
+PLAT="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+if [ "$PLAT" = "linux-x86_64" ]; then DEST="$HERE/bin"; else DEST="$HERE/bin/$PLAT"; fi
+mkdir -p "$DEST"
+cp target/release/examples/scourge_{prove,verifierd,mockbank} target/release/examples/real_bank_probe "$DEST/"
+( cd "$DEST" && shasum -a 256 scourge_prove scourge_verifierd scourge_mockbank real_bank_probe > SHA256SUMS 2>/dev/null || sha256sum scourge_prove scourge_verifierd scourge_mockbank real_bank_probe > SHA256SUMS )
+echo "binaries copied to $DEST"

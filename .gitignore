@@ -16,3 +16,4 @@ tools/realbank/body.txt
 backups/
 tools/realbank/body.txt
 tools/realbank/run.env
+var_test_server.log

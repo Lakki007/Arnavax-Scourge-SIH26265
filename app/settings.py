@@ -7,7 +7,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 VAR = Path(os.environ.get("SCOURGE_VAR", ROOT / "var"))
-BIN = Path(os.environ.get("SCOURGE_BIN", ROOT / "bin"))
+def _bin_dir() -> Path:
+    """Prebuilt proof binaries per platform: bin/<os>-<arch>/ when present (e.g. bin/darwin-arm64), else bin/ (Linux x86-64)."""
+    import platform
+    env = os.environ.get("SCOURGE_BIN")
+    if env:
+        return Path(env)
+    plat = ROOT / "bin" / f"{platform.system().lower()}-{platform.machine().lower()}"
+    return plat if (plat / "scourge_verifierd").exists() else ROOT / "bin"
+
+
+BIN = _bin_dir()
 CONFIG_PATH = ROOT / "config" / "scourge.json"
 DEMO_PATH = ROOT / "config" / "demo.json"
 DB_PATH = VAR / "scourge.db"

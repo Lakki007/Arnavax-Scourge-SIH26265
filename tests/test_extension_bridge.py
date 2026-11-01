@@ -29,7 +29,8 @@ pytestmark = pytest.mark.skipif(not _up(), reason=f"needs the app running at {B}
 import test_acceptance as T  # noqa: E402
 import bridge  # noqa: E402
 
-KEY = open(os.path.join(VARDIR, "internal.key")).read().strip()
+def _key():
+    return open(os.path.join(VARDIR, "internal.key")).read().strip()
 HOST = "netbanking.mockbank.test"
 
 
@@ -58,7 +59,7 @@ def _decision(cid):
 
 def test_bridged_good_record_verifies(off):
     cid, token, inst = _challenge(off, "FDR-002")
-    out = bridge.post_record(B, KEY, cid, inst, token, HOST, _record("FD-0000777777"))
+    out = bridge.post_record(B, _key(), cid, inst, token, HOST, _record("FD-0000777777"))
     assert out["decision"] == "verified", out
     assert _decision(cid)[0] == "verified"
 
@@ -66,20 +67,20 @@ def test_bridged_good_record_verifies(off):
 def test_bridged_loan_lien_is_discrepancy(off):
     cid, token, inst = _challenge(off, "FDR-002")
     rec = _record("FD-0000777777", lien="LOAN 2125000.00 AGAINST DEPOSIT")
-    out = bridge.post_record(B, KEY, cid, inst, token, HOST, rec)
+    out = bridge.post_record(B, _key(), cid, inst, token, HOST, rec)
     assert out["decision"] == "discrepancy", out
 
 
 def test_bridged_missing_lien_is_insufficient(off):
     cid, token, inst = _challenge(off, "FDR-002")
     rec = _record("FD-0000777777"); rec.pop("lien")
-    out = bridge.post_record(B, KEY, cid, inst, token, HOST, rec)
+    out = bridge.post_record(B, _key(), cid, inst, token, HOST, rec)
     assert out["decision"] == "insufficient_evidence", out
 
 
 def test_bridged_wrong_fd_is_rejected(off):
     cid, token, inst = _challenge(off, "FDR-002")
-    out = bridge.post_record(B, KEY, cid, inst, token, HOST, _record("FD-0000999999"))
+    out = bridge.post_record(B, _key(), cid, inst, token, HOST, _record("FD-0000999999"))
     assert out["decision"] == "rejected", out
 
 
@@ -87,12 +88,12 @@ def test_bridge_wraps_a_record_nested_in_a_list(off):
     # SBI-style: the decrypted body is {"accounts":[{...}, {...}]}; the bridge must find the right object.
     cid, token, inst = _challenge(off, "FDR-002")
     body = {"accounts": [_record("FD-0000123456", status="CLOSED"), _record("FD-0000777777")]}
-    out = bridge.post_record(B, KEY, cid, inst, token, HOST, body)
+    out = bridge.post_record(B, _key(), cid, inst, token, HOST, body)
     assert out["decision"] == "verified", out
 
 
 def test_consumed_challenge_cannot_be_bridged_twice(off):
     cid, token, inst = _challenge(off, "FDR-002")
-    bridge.post_record(B, KEY, cid, inst, token, HOST, _record("FD-0000777777"))
+    bridge.post_record(B, _key(), cid, inst, token, HOST, _record("FD-0000777777"))
     with pytest.raises(RuntimeError):
-        bridge.post_record(B, KEY, cid, inst, token, HOST, _record("FD-0000777777"))
+        bridge.post_record(B, _key(), cid, inst, token, HOST, _record("FD-0000777777"))

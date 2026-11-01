@@ -9,6 +9,17 @@
 - Idea deck: `docs/ppt/Scourge_SIH26265_Idea.pdf`
 - Lifecycle in the portal: file FDR (renewals linked) → bank-session proof → monitor (maturity, re-checks) → officer decision (hash-chained audit) → two-officer release with release letter
 
+## Run everything in one command
+
+```bash
+pip install -r requirements.txt pytest httpx
+python3 -m pytest tests          # starts the portal, the verifier and the synthetic banks itself, runs 273 tests (~4 min), stops them
+```
+
+- **Platforms:** prebuilt proof binaries ship for **Linux x86-64** (`bin/`) and **macOS Apple Silicon** (`bin/darwin-arm64/`); the app picks the right set automatically. Any other platform: `./scripts/build_rust.sh` (Rust toolchain) builds its own set into `bin/<os>-<arch>/`.
+- **Docker:** `docker compose up -d` → http://localhost:8000 (works on Apple Silicon too).
+- **Click through:** `./scripts/run.sh` → http://127.0.0.1:8080 → *Start the demo*.
+
 An institution proves, from its own net-banking session, what the bank's server says about an FDR. AICTE's separate verifier checks the MPC-TLS proof (TLSNotary) and sees only that deposit's record. The app compares the proven fields with the register and lets an officer accept, escalate or release.
 
 **Status (1 Nov 2026):** prototype, runs in demo mode by default (synthetic bank, real proofs); `SCOURGE_AUTH=password` switches to production sign-in. Judge kit: `docs/JUDGE_DEMO.md`. Operations: `docs/RUNBOOK.md`.
@@ -75,15 +86,15 @@ On first run the app:
 
 ```bash
 pip install -r requirements.txt pytest httpx
-python3 -m pytest -q tests/test_policy.py tests/test_units.py tests/test_backup.py   # fast, no server needed
+python3 -m pytest -q tests                          # the full suite; the portal is started and stopped for you (273 pass)
+python3 -m pytest -q tests/test_policy.py tests/test_units.py tests/test_backup.py   # the fast subset, no server
 
-pip install -r requirements-dev.txt && python3 -m playwright install chromium
-./scripts/run.sh &                                  # acceptance and browser tests drive the running app
-python3 -m pytest -q tests/                         # full suite: 273 pass; plus 3 production-mode tests (tests/test_production_mode.py) against a server started with SCOURGE_AUTH=password
-python3 scripts/shots.py var/shots                  # screenshots of every page, desktop and mobile; reports console errors and 5xx
+pip install -r requirements-dev.txt && python3 -m playwright install chromium        # adds the browser journeys
+SCOURGE_AUTH=password SCOURGE_VAR=var_prod ./scripts/run.sh &                        # production sign-in mode, then:
+SCOURGE_AUTH=password SCOURGE_VAR=var_prod python3 -m pytest -q tests/test_production_mode.py   # +3 tests
 ```
 
-Without Playwright installed, the browser-journey file is skipped instead of failing collection. CI (`.github/workflows/ci.yml`) runs the full suite, including the real proof binaries and the browser journey.
+If a portal is already running on 127.0.0.1:8080, the tests use it instead of starting one (`SCOURGE_NO_AUTOSTART=1` turns auto-start off). Without Playwright, the browser journeys skip instead of failing collection. CI (`.github/workflows/ci.yml`) runs the full suite, including the real proof binaries and the browser journey.
 
 ## What is real, synthetic or incomplete
 
