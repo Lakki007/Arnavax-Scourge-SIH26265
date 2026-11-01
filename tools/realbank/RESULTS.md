@@ -24,3 +24,37 @@ likely refuses replayed requests (one-time request numbers / encrypted payloads 
 **Next.** (1) Browser-extension prover so the proof covers the browser's own original request (no replay).
 (2) For banks that encrypt payloads inside HTTPS, disclose the per-session app key to the verifier so it can decrypt the
 proven ciphertext. (3) Repeat on an FD details page.
+
+## 2026-11-01 · State Bank of India (OnlineYONO web) · team member's own ₹1,000 FD · follow-up
+
+A fresh ₹1,000 7-day FD was opened and the browser's own FD-details calls were probed from the laptop
+(`.tlsn/.../real_bank_probe`, Mac arm64 build). Requests were isolated with DevTools "Request conditions"
+(block `https://api.onlineyono.sbi.bank.in/app/deposits/*`), copied as cURL, and fed through `from_curl.py`.
+
+Findings, in order:
+1. A **replayed** request (already sent by the browser) → MPC-TLS session completes, SBI returns **HTTP 401**.
+   `status`, `requestNo`, `txnId` present (encrypted, 16/32/40 bytes); `body` absent. 0.7 s, 188 MB at MAX_SENT=16384.
+2. A **blocked, never-sent** request copied as cURL → still **401**. Chrome omits cookies and the `Origin`/`Sec-*`
+   headers from a blocked request's "Copy as cURL" (provisional headers only).
+3. The blocked request **with the browser's own headers merged in** (`from_curl.py --merge`, adding `Origin`,
+   `User-Agent`, `Sec-Fetch-*`, `sec-ch-ua*`; `Authorization`/body unchanged) → **HTTP 200 OK**, 0.4 s, **61 MB**.
+   But the response is only 388 bytes (vs the browser's real 2.3 kB), and the plain fields are absent: SBI replies
+   with a short encrypted body, not the deposit record.
+4. Plain `curl` (no browser TLS fingerprint) is blocked by SBI's WAF ("Request Rejected", support ID) — this is a
+   firewall block of a non-browser client, separate from the API behaviour above.
+
+**What this establishes.** The split-key (MPC-TLS) session works against SBI's **logged-in** deposits API
+(`/app/deposits/allDeposit/customer/accounts`), certificate verified against public (Mozilla) roots, and SBI returns
+HTTP 200 to a correctly-headed request. Per-proof traffic on a real bank is ~61 MB at a 4 KB request budget,
+matching `BUDGETS.md`.
+
+**What it does NOT establish.** The account/FD fields. SBI's web app encrypts both the request and response bodies
+at the application layer (the page shows `{"header":{...},"body":"<ciphertext>"}`), with a key its JavaScript derives
+per request in the browser. A request copied out of the browser and re-sent is answered with a short encrypted reply,
+not the deposit record, so no FD field can be disclosed this way.
+
+**Conclusion / next step.** For a bank that encrypts payloads inside HTTPS (SBI YONO), the only route to the data is a
+**browser-extension prover**: notarise the browser's *own* original request as it is sent (no replay), and disclose the
+page's per-session app-layer key to AICTE's verifier so it can decrypt the proven ciphertext. A bank that serves FD
+pages without this extra layer could be proven today with the existing probe. Wording stays:
+"live real-bank session (first bank tested: SBI)"; never claim the account or FD data was proven.
