@@ -37,6 +37,59 @@ def _master():
     return p.read_bytes()
 
 
+def _key_files():
+    """Keys that may hold a document's wrapped key: current, then a rotation in progress (.next), then the previous one (.prev)."""
+    return [VAR / n for n in ("vault_master.key", "vault_master.key.next", "vault_master.key.prev")]
+
+
+def _unwrap(wrapped: bytes) -> bytes:
+    for p in _key_files():
+        if p.exists():
+            try:
+                return AESGCM(p.read_bytes()).decrypt(wrapped[:12], wrapped[12:], b"scourge-vault-key")
+            except InvalidTag:
+                continue
+    raise InvalidTag()
+
+
+def _wrap(key: bytes, master: bytes) -> str:
+    wn = secrets.token_bytes(12)
+    return base64.b64encode(wn + AESGCM(master).encrypt(wn, key, b"scourge-vault-key")).decode()
+
+
+def rotate_master(conn):
+    """Crash-safe master-key rotation. Every document's per-file key is re-wrapped under a new master key.
+    1. the new key is written to vault_master.key.next (0600) and fsynced;
+    2. every wrapped key is re-wrapped in ONE database transaction;
+    3. the old key is copied to .prev, then .next replaces the current key in one atomic rename.
+    A crash at any point leaves every document readable: _unwrap tries current, .next and .prev.
+    Returns the number of documents re-wrapped. Call finalize_rotation() once all documents verify."""
+    cur, nxt, prev = _key_files()
+    _master()                                         # make sure a current key exists
+    new = AESGCM.generate_key(bit_length=256)
+    fd = os.open(nxt, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(new); f.flush(); os.fsync(f.fileno())
+    rows = [(r[0], r[1]) for r in conn.execute("SELECT id, wrapped_key FROM documents").fetchall()]
+    with conn:
+        for rid, wk in rows:
+            conn.execute("UPDATE documents SET wrapped_key=? WHERE id=?", (_wrap(_unwrap(base64.b64decode(wk)), new), rid))
+    # keep the old key as .prev (copy, fsynced), then swap .next in with one atomic rename: a current key always exists
+    fd = os.open(prev, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(cur.read_bytes()); f.flush(); os.fsync(f.fileno())
+    os.replace(nxt, cur)
+    os.chmod(cur, 0o600)
+    return len(rows)
+
+
+def finalize_rotation():
+    """Delete the previous master key once every document has been verified under the new one."""
+    prev = _key_files()[2]
+    if prev.exists():
+        prev.unlink()
+
+
 class Refused(Exception):
     pass
 
@@ -86,7 +139,7 @@ def seal(fdr_id: str, data: bytes):
 def open_doc(row) -> bytes:
     try:
         wrapped = base64.b64decode(row["wrapped_key"])
-        key = AESGCM(_master()).decrypt(wrapped[:12], wrapped[12:], b"scourge-vault-key")
+        key = _unwrap(wrapped)
         data = AESGCM(key).decrypt(base64.b64decode(row["nonce"]), (VAULT / row["stored_as"]).read_bytes(),
                                    f"{row['fdr_id']}|{row['sha256']}".encode())
     except (InvalidTag, FileNotFoundError, ValueError) as e:
