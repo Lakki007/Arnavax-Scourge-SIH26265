@@ -6,7 +6,7 @@ Demo video: https://youtu.be/8HoplhFOGCg · Idea deck: [`docs/ppt/Scourge_SIH262
 
 > **In one sentence:** an institution proves, from its own net-banking session, what the bank's server says about its security-deposit FDR; AICTE's verifier checks the proof and sees only that one deposit's record, so a forged, edited or out-of-date FDR cannot pass.
 
-The prototype's workflow runs against a **synthetic bank** with real cryptographic proofs. On 1 Nov 2026 the same split-key session ran live against a real bank's logged-in deposits API (first bank tested: SBI: certificate verified, HTTP 200 OK in 0.4 s, 61 MB). For banks that encrypt deposit data inside HTTPS, as SBI does, the in-browser prover reads the record with the page's own session key ([`EXTENSION_PROVER.md`](EXTENSION_PROVER.md)); signed e-advice and branch confirmation cover the rest ([`FEASIBILITY.md`](FEASIBILITY.md)). Scourge never marks a deposit Verified without a proof.
+The prototype's workflow runs against a **synthetic bank** with real cryptographic proofs. On 1 Nov 2026 the same split-key session ran live against a real bank's logged-in deposits API (first bank tested: SBI: certificate verified, HTTP 200 OK in 0.4 s, 61 MB). For banks that encrypt deposit data inside HTTPS, as SBI does, an in-browser prover is planned (design: [`EXTENSION_PROVER.md`](EXTENSION_PROVER.md); deposit fields were not read at SBI); signed e-advice and branch confirmation cover the rest ([`FEASIBILITY.md`](FEASIBILITY.md)). Scourge never marks a deposit Verified without a proof.
 
 ---
 
@@ -187,12 +187,12 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Data per proof | about 39 MB between prover and verifier | Measured |
 | Bad deposits caught | 119 / 119 (an upload-and-approve baseline approved all 119) | Measured, 180 fresh synthetic deposits |
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
-| Automated tests | 276 pass (273 demo mode + 3 production sign-in mode), 2 deployment-only skipped | Local run, 1 Nov 2026 |
+| Automated tests | 293 pass (283 demo mode + 10 production mode), 2 deployment-only skipped | `scripts/test_all.sh`, 1 Nov 2026 |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages |
 | Live real-bank MPC-TLS session | Logged-in deposits API, HTTP 200 OK in 0.4 s, 61 MB (first bank tested: SBI) | Measured |
 | Software licence cost | ₹0 | Estimate |
 
-**Next:** the in-browser prover reads deposit records at app-encrypted banks (its verifier→portal bridge is built and tested); a survey of which banks show liens and joint holders; bank terms and AICTE acceptance through legal review.
+**Next:** build the in-browser prover to read deposit records at app-encrypted banks (its verifier→portal bridge is built and tested); a survey of which banks show liens and joint holders; bank terms and AICTE acceptance through legal review.
 
 ---
 

@@ -2,7 +2,7 @@
 
 Labels: **[Measured]** we ran it. **[Estimate]** our arithmetic. **[In progress]** being built. **[Next]** the roadmap.
 
-## 1. Every bank is covered: three evidence tiers
+## 1. Three evidence tiers: cryptographic where supported, governed fallbacks elsewhere
 
 Scourge never needs every bank to work on day one. Each deposit is checked through the strongest tier available for its bank, and the tier is shown on the evidence:
 
@@ -57,7 +57,7 @@ Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traf
 
 ## 5. Pilot path
 
-1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 276 automated tests.
+1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 293 automated tests (283 demo mode + 10 production mode).
 2. ✓ Live split-key session with a real bank's logged-in deposits API (first bank tested: SBI; 200 OK in 0.4 s).
 3. In-browser prover → deposit records at 3 large banks. [In progress: bridge built and tested]
 4. One AICTE regional office, tiers 1–3 together, against its current register. [Next]

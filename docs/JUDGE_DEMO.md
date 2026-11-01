@@ -63,7 +63,7 @@ Every synthetic element is labelled on screen. Say "synthetic bank, real proofs"
 ## 5. Likely judge questions and evidence-based answers
 
 **Q: Has this worked on a real bank?**
-Yes, at the session level. The split-key session ran against a real bank's production API on 30 Oct and its **logged-in deposits API** on 1 Nov (first bank tested: SBI): certificate verified against public roots, **200 OK in 0.4 s, 61 MB**. The field test also showed that SBI wraps deposit data in a second cipher inside HTTPS; our in-browser prover reads it with the page's own session key, disclosed to AICTE's verifier only, and its portal bridge is already built and tested. Log: `tools/realbank/RESULTS.md`.
+Yes, at the session level. The split-key session ran against a real bank's production API on 30 Oct and its **logged-in deposits API** on 1 Nov (first bank tested: SBI): certificate verified against public roots, **200 OK in 0.4 s, 61 MB**. The field test also showed that SBI wraps deposit data in a second cipher inside HTTPS; so the deposit fields were **not** read there. An in-browser prover that would read them is planned; only its portal bridge is built and tested. Until then such banks use the weaker, labelled fallback channels. Log: `tools/realbank/RESULTS.md`.
 
 **Q: Isn't this just a screenshot with extra steps?**
 No. The TLS session keys are shared with AICTE's verifier, so the institution cannot edit what the bank sent. In the demo, an institution-run "bank" with its own certificate authority is rejected: 14 of 14 in our fresh case book.

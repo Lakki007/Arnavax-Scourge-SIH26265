@@ -2,7 +2,7 @@
 
 *How Scourge reads deposit records from banks that encrypt them inside HTTPS, and how it plugs into the portal we already have. Designed from our 1 Nov 2026 field test on a real bank's logged-in deposits API (`tools/realbank/RESULTS.md`).*
 
-## Two provers, every bank
+## Two provers (the in-browser one is planned)
 
 Scourge has two ways to prove a deposit, and picks the one that fits the bank:
 
