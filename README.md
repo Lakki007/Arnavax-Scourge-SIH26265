@@ -79,7 +79,7 @@ python3 -m pytest -q tests/test_policy.py tests/test_units.py tests/test_backup.
 
 pip install -r requirements-dev.txt && python3 -m playwright install chromium
 ./scripts/run.sh &                                  # acceptance and browser tests drive the running app
-python3 -m pytest -q tests/                         # full suite: 267 pass; plus 3 production-mode tests (tests/test_production_mode.py) against a server started with SCOURGE_AUTH=password
+python3 -m pytest -q tests/                         # full suite: 273 pass; plus 3 production-mode tests (tests/test_production_mode.py) against a server started with SCOURGE_AUTH=password
 python3 scripts/shots.py var/shots                  # screenshots of every page, desktop and mobile; reports console errors and 5xx
 ```
 

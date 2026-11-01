@@ -25,7 +25,7 @@ jobs:
           ./scripts/run.sh > app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8080/api/health && break; sleep 1; done
       - name: Acceptance and browser tests (real prover and verifier, synthetic bank)
-        run: SCOURGE_REQUIRE_SERVER=1 python -m pytest -q tests/test_acceptance.py tests/test_ui_journey.py
+        run: SCOURGE_REQUIRE_SERVER=1 python -m pytest -q tests/test_acceptance.py tests/test_ui_journey.py tests/test_extension_bridge.py
       - name: App log on failure
         if: failure()
         run: tail -200 app.log

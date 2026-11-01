@@ -57,7 +57,7 @@ Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traf
 
 ## 5. Pilot path
 
-1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 270 automated tests.
+1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 276 automated tests.
 2. ✓ Live real-bank MPC-TLS session (first bank tested: SBI).
 3. Browser-extension prover → FD data proven at 3 large banks. [Open]
 4. One AICTE regional office, tiers 1–3 together, against its current register. [Open]
