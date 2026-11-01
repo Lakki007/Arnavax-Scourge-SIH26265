@@ -318,7 +318,7 @@ s4 = S[3]; frame(s4)
 title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
-         ("FaGlobe", SKY, "Real bank", "live split-key session", "HTTP 200 in 1.0 s · first bank: SBI"),
+         ("FaGlobe", SKY, "Real bank", "live split-key session", "logged-in deposits API · 200 OK in 0.4 s"),
          ("FaVial", MINT, "276 / 276", "automated tests pass", "incl. rollback, forgery, backup-restore"),
          ("FaCoins", AMBER, "₹0", "software licences", "60 MB/proof (measured) · FEASIBILITY.md")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
@@ -331,9 +331,9 @@ for i, (ic, col, big, lab, note) in enumerate(tiles):
 # live real-bank run (replaces the generic feasibility ticks with evidence)
 rect(s4, L, 3.06, CW, 0.56, fill=INK, r=0.2)
 icon(s4, "FaBuildingColumns", L + 0.14, 3.15, 0.38, MINT, pad=0.22)
-tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("First bank tested: SBI · 30 Oct 2026", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
-tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":1.0}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
-   [("Split-key session with a bank's production net-banking API; cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("First bank tested: SBI · 1 Nov 2026", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
+tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":0.4}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
+   [("Split-key session with a bank's logged-in deposits API (first bank tested: SBI); cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
@@ -378,7 +378,7 @@ pill(s5, L, 3.42, lw_, 0.36, "TODAY", CORAL, size=10.5, font=H)
 pill(s5, L + lw_ + gap_, 3.42, lw_, 0.36, "WITH SCOURGE", MINT, size=10.5, font=H)
 pairs = [("Branch letter or uploaded screenshot", "The bank's own server, proven"),
          ("Checked once, trusted for 10 years", "Re-checked any time, before every release"),
-         ("Weeks per confirmation", "0.58 s per proof (synthetic); 1.0 s live bank session"),
+         ("Weeks per confirmation", "0.58 s per proof (synthetic); 0.4 s live bank session"),
          ("Hidden loans found at release, or never", "Pledge checked at the bank; two-officer release")]
 py = 3.88
 for a_, b2 in pairs:
