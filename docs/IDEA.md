@@ -189,7 +189,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
 | Automated tests | 266 pass, 2 deployment-only skipped | Local run, 1 Nov 2026 |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages |
-| Live real-bank MPC-TLS session | Logged-in API call, HTTP 200, ~1 s, ~357 MB traffic (first bank tested: SBI) | Measured; transport and certificate proven, account data **not yet** |
+| Live real-bank MPC-TLS session | Logged-in API call, HTTP 200, ~1 s (first bank tested: SBI); 60 MB per proof at a right-sized budget (BUDGETS.md) | Measured; transport and certificate proven, account data **not yet** |
 | Software licence cost | ₹0 | Estimate |
 
 **Next gate:** prove the FD data itself at one real bank with a browser-extension prover (the replayed request was answered without account data); survey which banks show liens and joint holders; take bank terms and AICTE acceptance to legal review.

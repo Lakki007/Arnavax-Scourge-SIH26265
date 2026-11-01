@@ -10,7 +10,7 @@
 //!   HEADERS_FILE=headers.txt           optional "Name: value" lines copied from browser dev-tools
 //!   REVEAL=depositNo,status,...        JSON keys ("key":"value") or literal labels to reveal
 //!   ALLOW=onlinesbi.sbi,bank.in        allowed domain suffixes (verifier side)
-//!   MAX_SENT=16384 MAX_RECV=262144     MPC budgets in bytes
+//!   MAX_SENT=4096 MAX_RECV=65536       MPC budgets in bytes (traffic scales with MAX_SENT; see BUDGETS.md)
 //!   HTTPS_PROXY=http://host:port       optional CONNECT proxy (used only to reach the bank)
 
 use std::{
@@ -130,8 +130,8 @@ async fn main() {
     let url = env::var("URL").expect("set URL");
     let uri: Uri = url.parse().expect("bad URL");
     let host = uri.host().unwrap().to_string();
-    let max_sent: usize = envs("MAX_SENT", "16384").parse().unwrap();
-    let max_recv: usize = envs("MAX_RECV", "262144").parse().unwrap();
+    let max_sent: usize = envs("MAX_SENT", "4096").parse().unwrap();
+    let max_recv: usize = envs("MAX_RECV", "65536").parse().unwrap();
     let keys: Vec<String> = envs("REVEAL", "").split(',').filter(|s| !s.is_empty()).map(String::from).collect();
 
     let (p, v) = tokio::io::duplex(1 << 23);

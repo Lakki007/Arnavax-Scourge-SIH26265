@@ -30,13 +30,13 @@ Rules that hold across tiers: a lower tier can **fill in** a field a proof could
 
 ## 3. Cost at scale [Estimate]
 
-Inputs: ~357 MB prover↔verifier traffic and ~1 s per proof (real-bank run); 2 concurrent proofs per verifier process on 2 vCPU (prototype setting).
+Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traffic and 1–2 s per proof at a 4 KB request budget (a bank request is ~2 KB); traffic does not grow with the size of the bank's page. The 30 Oct real-bank run used an oversized 16 KB+ budget and moved 357 MB; right-sizing the budget is a setting, not new work. 2 concurrent proofs per verifier process on 2 vCPU (prototype setting).
 
 | Deposits checked | Checks per year | Traffic per year | Verifier time |
 |---|---|---|---|
-| 10,000 | 4 (quarterly) = 40,000 | ~14 TB | ~11 CPU-hours of proof time; one small VM handles the peak if checks are spread over a week |
+| 10,000 | 4 (quarterly) = 40,000 | ~2.4 TB | ~11 CPU-hours of proof time; one small VM handles the peak if checks are spread over a week |
 
-- Traffic is mostly upload from the institution to AICTE's verifier; inbound traffic is free on major clouds and on NIC networks. The institution's upload is ~357 MB per check, about one HD video.
+- Traffic is mostly upload from the institution to AICTE's verifier; inbound traffic is free on major clouds and on NIC networks. The institution's upload is ~60 MB per check, less than a short video call.
 - Software licences: ₹0 (TLSNotary MIT/Apache-2.0; FastAPI, SQLite).
 - Hosting: one small server (2 vCPU, 8 GB) for the portal and one verifier; add verifier processes linearly.
 - Tier 3 costs officer and branch time only when tiers 1–2 are unavailable.

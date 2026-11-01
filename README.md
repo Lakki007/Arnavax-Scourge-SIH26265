@@ -99,7 +99,7 @@ Without Playwright installed, the browser-journey file is skipped instead of fai
 | Backup and recovery | Online backup, checksummed archive, verified restore (`scripts/backup.py`) |
 | Live real-bank MPC-TLS session | **Real** (first bank tested: SBI; transport, certificate and timing) |
 | Account / FD data proven at a real bank | **Not yet** (needs the browser-extension prover; fallback in FEASIBILITY.md) |
-| Timing with a remote verifier | Real bank run: about 1 s, ~357 MB prover-verifier traffic |
+| Timing with a remote verifier | Real bank run: about 1 s. Traffic is set by the request budget: 60 MB at a 4 KB budget, measured live against public roots (`tools/realbank/BUDGETS.md`); the 30 Oct run used an oversized budget (357 MB) |
 
 ## Audit changes (29 Oct)
 
@@ -118,7 +118,7 @@ See `docs/AUDIT.md`. Behaviour that changed on purpose:
 - **Freshness.** Proofs show the bank's response at the session time only. A field the bank page does not show is reported as unknown.
 - **Record-only disclosure.** It cannot prove where the record sat in the response; this is shown on the evidence.
 - **TLSNotary build.** It needs TLS 1.2 (P-256, AES-128-GCM) on the bank server. Most Indian net-banking hosts probed accepted this; TLS 1.3-only servers would fail.
-- **Limits.** At most 2 concurrent proofs per verifier; each proof moves about 39 MB (synthetic bank, localhost) to ~357 MB (real bank, larger certificate chain and request) between prover and verifier. Sizing in FEASIBILITY.md.
+- **Limits.** At most 2 concurrent proofs per verifier; each proof moves 39–60 MB between prover and verifier at a 2–4 KB request budget (measured; `tools/realbank/BUDGETS.md`). Response size does not add traffic. Sizing in FEASIBILITY.md.
 
 ## Licences
 

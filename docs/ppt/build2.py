@@ -320,7 +320,7 @@ pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
          ("FaGlobe", SKY, "Real bank", "live split-key session", "HTTP 200 in 1.0 s · first bank: SBI"),
          ("FaVial", MINT, "266 / 266", "automated tests pass", "incl. rollback, forgery, backup-restore"),
-         ("FaCoins", AMBER, "₹0", "software licences", "357 MB/proof · see FEASIBILITY.md")]
+         ("FaCoins", AMBER, "₹0", "software licences", "60 MB/proof (measured) · FEASIBILITY.md")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
     rect(s4, x, 1.65, cw4, 1.3, fill=WHITE, line=LINE, r=0.1, lw=1.25)
