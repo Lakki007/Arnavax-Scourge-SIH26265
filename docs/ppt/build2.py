@@ -300,18 +300,30 @@ for lab, col in [("Verified", MINT), ("Discrepancy", CORAL), ("Insufficient evid
     pill(s3, ox, 6.36, w, 0.3, lab, col, size=9, font=H)
     ox += w + 0.12
 
-# hero: video card
+# hero: what the officer sees (the PDF can't play video, so the QR carries the demo)
 vx, vy, vw, vh = 9.05, 2.85, R - 9.05, 3.92
 rect(s3, vx, vy, vw, vh, fill=INK, r=0.06)
-tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE 8-MINUTE DEMO", {"f": H, "b": True, "s": 11, "c": MINT})]])
-mw = vw - 0.5; mh = mw * 9 / 16
-mv = s3.shapes.add_movie(VIDEO, Inches(vx + 0.25), Inches(vy + 0.6), Inches(mw), Inches(mh), poster_frame_image=POSTER, mime_type="video/mp4")
-mv.name = "Demo video"
-qy = vy + 0.6 + mh + 0.2
+tx(s3, vx + 0.25, vy + 0.16, vw - 0.5, 0.3, [[("WHAT THE OFFICER SEES", {"f": H, "b": True, "s": 11, "c": MINT})]])
+tx(s3, vx + 0.25, vy + 0.42, vw - 0.5, 0.3, [[("Example: each field, how it is known, what blocks release", {"s": 8.5, "c": GREY_L})]])
+rows3 = [("Principal", "Confirmed", MINT, "Bank session proof"),
+         ("Maturity", "Confirmed", MINT, "Bank session proof"),
+         ("Lien to AICTE", "Unknown", AMBER, "Bank page did not show it"),
+         ("Other loans", "Unknown", AMBER, "Silence is not evidence"),
+         ("Release", "Blocked", CORAL, "Insufficient evidence"),
+         ("Next step", "Ask bank", VIO, "e-advice or branch")]
+ry = vy + 0.78
+for f_, st_, col_, src_ in rows3:
+    tx(s3, vx + 0.25, ry, 1.05, 0.27, [[(f_, {"s": 9, "b": True, "c": WHITE})]], anchor=MSO_ANCHOR.MIDDLE)
+    pill(s3, vx + 1.3, ry + 0.02, 0.95, 0.23, st_, col_, size=8)
+    tx(s3, vx + 2.32, ry, vw - 2.45, 0.27, [[(src_, {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
+    ry += 0.33
+mh = ry - (vy + 0.72) - 0.1
+qy = vy + 0.72 + mh + 0.18
 qr = rect(s3, vx + 0.25, qy, 1.05, 1.05, fill=WHITE, r=0.08)
 qp = s3.shapes.add_picture(IMG + "qr_dark.png", Inches(vx + 0.3), Inches(qy + 0.05), Inches(0.95), Inches(0.95)); qp.click_action.hyperlink.address = DEMO_HREF
-tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Click to play a 98-second preview here; scan / click the QR for the full 8-minute demo", {"s": 9.5, "b": True, "c": WHITE, "after": 3})],
-                                        [("Synthetic bank + live real-bank session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
+tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Scan for the 8-minute demo", {"s": 10, "b": True, "c": WHITE, "after": 3})],
+                                        [("Try it live:", {"s": 9, "b": True, "c": GREY_L})], [("scourge-sih26265.onrender.com", {"s": 8.5, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
+                                        [("Synthetic bank, real proofs", {"s": 9, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 4  FEASIBILITY
 s4 = S[3]; frame(s4)

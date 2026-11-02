@@ -11,7 +11,9 @@ T = "/tmp/claude-0/ppt/"
 PPTX, PDF = T + "Scourge_SIH26265_Idea.pptx", T + "Scourge_SIH26265_Idea.pdf"
 SOFFICE = sys.argv[1]
 LINKS = {  # slide number -> [(text that starts the line, url)]
+    3: [("scourge-sih26265.onrender.com", "https://scourge-sih26265.onrender.com")],
     6: [("youtu.be/Gm4dzjRQvC4", "https://youtu.be/Gm4dzjRQvC4"),
+        ("Live demo", "https://scourge-sih26265.onrender.com"),
         ("github.com/Lakki007/Arnavax-Scourge-SIH26265", "https://github.com/Lakki007/Arnavax-Scourge-SIH26265"),
         ("theprint.in", "https://theprint.in/india/cbi-says-haryana-pollution-board-secys-notes-fed-excess-deposits-to-idfc-rs-50-cr-cap-became-rs-163-cr/3062087/"),
         ("deccanherald.com", "https://www.deccanherald.com/india/greater-transparency-aicte-needed-says-2576077"),
