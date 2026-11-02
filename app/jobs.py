@@ -12,7 +12,8 @@ from . import db
 from .settings import BANK_STATE, BIN, DEMO, JOBTMP, ROOT, VERIFIER_ADDR, VERIFIER_CFG
 from .views import copy_path
 
-_slots = threading.BoundedSemaphore(DEMO["max_concurrent_proofs"])
+MAX_PROOFS = int(os.environ.get("SCOURGE_MAX_PROOFS", DEMO["max_concurrent_proofs"]))   # 1 on a 512 MB host
+_slots = threading.BoundedSemaphore(MAX_PROOFS)
 _running: dict[str, subprocess.Popen] = {}
 _cancel: set[str] = set()
 
@@ -62,7 +63,7 @@ def _append_stage(job_id, line):
 
 def start(challenge, fdr, mode, actor):
     if not _slots.acquire(blocking=False):
-        raise BusyError(f"{DEMO['max_concurrent_proofs']} proofs are already running; try again in a few seconds")
+        raise BusyError(f"{MAX_PROOFS} proof(s) already running; try again in a few seconds")
     job_id = "JOB-" + secrets.token_hex(6)
     _starting.add(job_id)
     db.x("INSERT INTO jobs(id,challenge_id,fdr_id,institution_id,mode_json,state,started_at) VALUES(?,?,?,?,?,?,?)",
