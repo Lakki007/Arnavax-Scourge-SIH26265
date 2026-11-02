@@ -16,9 +16,57 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 
-from .settings import VAR, VERIFIER_PUB_FILE
+from .settings import BRIDGE_PUB_FILE, VAR, VERIFIER_PUB_FILE
 
 PIN_FILE = VAR / "verifier_key.pin"
+BRIDGE_PIN_FILE = VAR / "bridge_key.pin"
+
+# Evidence channels. Only "mpc_tls" (signed by the verifier that co-ran the bank's TLS session) can reach Verified.
+MPC = "mpc_tls"
+UNPROVEN = "extension_unproven"
+UNPROVEN_REASON = "extension_proof_not_yet_available"
+
+
+def cap(decision, channel):
+    """A result from the extension bridge is a decrypted record WITHOUT a proof binding it to the bank's
+    TLS transcript, so it can show a problem (discrepancy) but can never clear a deposit."""
+    if channel == UNPROVEN and decision == "verified":
+        return "insufficient_evidence", UNPROVEN_REASON
+    return decision, None
+
+
+def _read_pin(path):
+    try:
+        return path.read_text(encoding="utf-8").split()[1]
+    except (FileNotFoundError, IndexError):
+        return None
+
+
+def check_any(raw: bytes, sig_hex: str):
+    """(ok, fingerprint, reason, channel). Tries the verifier key, then the bridge key (pinned separately)."""
+    ok, fp, why = check(raw, sig_hex)
+    if ok or why in ("verifier_key_changed",):
+        return ok, fp, why, MPC
+    try:
+        bpub = BRIDGE_PUB_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ok, fp, why, MPC
+    pinned_b = _read_pin(BRIDGE_PIN_FILE)
+    if pinned_b is None:
+        from . import db
+        fd = os.open(BRIDGE_PIN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"{fingerprint(bpub)} {bpub}\n")
+        db.event("system", "bridge_key_pinned", None, fingerprint=fingerprint(bpub))
+        pinned_b = bpub
+    if pinned_b != bpub or not sig_hex:
+        return ok, fp, why, MPC
+    bok, bfp, _ = verify_with(pinned_b, raw, sig_hex)
+    return (True, bfp, None, UNPROVEN) if bok else (ok, fp, why, MPC)
+
+
+def pinned_for(channel):
+    return _read_pin(BRIDGE_PIN_FILE) if channel == UNPROVEN else pinned()
 
 
 def current_pub_hex():

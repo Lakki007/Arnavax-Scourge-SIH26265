@@ -27,7 +27,9 @@ for r in c.execute("SELECT * FROM evidence ORDER BY id"):
     if not r["facts_raw"]:
         legacy += 1                     # recorded before signed evidence existed
         continue
-    ok, fp, why = evidence_sig.verify_with(pub, r["facts_raw"].encode(), r["verifier_sig"] or "")
+    ch = r["channel"] or evidence_sig.MPC
+    key = evidence_sig.pinned_for(ch)
+    ok, fp, why = evidence_sig.verify_with(key, r["facts_raw"].encode(), r["verifier_sig"] or "") if key else (False, None, "no pinned key for channel")
     if not ok:
         bad.append((r["id"], f"signature: {why}"))
         continue
@@ -37,7 +39,7 @@ for r in c.execute("SELECT * FROM evidence ORDER BY id"):
         continue
     fdr = dict(c.execute("SELECT * FROM fdrs WHERE id=?", (r["fdr_id"],)).fetchone())
     facts.pop("metrics", None)
-    decision, _ = policy.apply(facts, fdr)
+    decision, _ = evidence_sig.cap(policy.apply(facts, fdr)[0], ch)
     if decision != r["decision"]:
         bad.append((r["id"], f"stored decision '{r['decision']}' but the signed facts give '{decision}'"))
 for eid, why in bad:

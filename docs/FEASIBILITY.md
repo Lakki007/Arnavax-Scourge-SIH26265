@@ -57,7 +57,7 @@ Inputs (measured, `tools/realbank/BUDGETS.md`): **60 MB** prover↔verifier traf
 
 ## 5. Pilot path
 
-1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 293 automated tests (283 demo mode + 10 production mode).
+1. ✓ Prototype with the full lifecycle (release types, settlement, regional scoping) and 298 automated tests (288 demo mode + 10 production mode).
 2. ✓ Live split-key session with a real bank's logged-in deposits API (first bank tested: SBI; 200 OK in 0.4 s).
 3. In-browser prover → deposit records at 3 large banks. [In progress: bridge built and tested]
 4. One AICTE regional office, tiers 1–3 together, against its current register. [Next]

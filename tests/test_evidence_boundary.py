@@ -100,3 +100,17 @@ def test_b4_verifier_key_is_pinned_and_audited(off):
     assert pin[1] == pub
     fp = _db().execute("SELECT detail_json FROM events WHERE kind='evidence_recorded' ORDER BY id DESC").fetchone()[0]
     assert json.loads(fp)["verifier_key"] == pin[0]
+
+
+def test_b5_bridge_key_cannot_mint_verified(off):
+    """b5 The extension bridge's key is not the verifier's: anything it signs is recorded as unproven and capped."""
+    sys.path.insert(0, os.path.join(ROOT, "tools", "extension"))
+    import bridge
+    off.post("/fdrs/FDR-002/challenge")
+    cid, token, inst = sqlite3.connect(T.DB).execute(
+        "SELECT id, token, institution_id FROM challenges WHERE fdr_id='FDR-002' AND state='issued' ORDER BY issued_at DESC").fetchone()
+    rec = {"depositNo": "FD-0000777777", "status": "ACTIVE", "currentBalance": "2500000.00", "principal": "2500000.00",
+           "maturityDate": "2029-01-15", "holders": "SYNTHETIC / MEMBER SECRETARY AICTE", "lien": "AICTE NEW DELHI (SECURITY DEPOSIT)"}
+    out = bridge.post_record(B, open(os.path.join(VARDIR, "internal.key")).read().strip(), cid, inst, token, "netbanking.mockbank.test", rec)
+    assert out["decision"] != "verified"
+    assert _audit().returncode == 0          # the audit re-verifies it under the bridge key and re-applies the cap

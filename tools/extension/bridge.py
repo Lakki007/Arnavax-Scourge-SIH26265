@@ -65,19 +65,31 @@ def build_facts(bank_host, fd_number, record):
     return {"gate": "facts_ok", "reason": None, "fields": fields}
 
 
-def _verifier_signature(raw):
-    """The extension's verifier signs its results like scourge_verifierd does; the portal refuses unsigned facts."""
+def _bridge_signature(raw):
+    """The bridge signs with its OWN key (never the verifier's). The portal records what it signs as
+    "extension, unproven": usable to flag a problem, never enough to mark a deposit Verified, because this
+    path has no proof yet that the decrypted record came from the bank's TLS session."""
     sys.path.insert(0, str(ROOT))
     from app import evidence_sig
-    from app.settings import VERIFIER_KEY_FILE
-    return evidence_sig.sign(raw, VERIFIER_KEY_FILE.read_text(encoding="utf-8").strip())
+    from app.settings import BRIDGE_KEY_FILE, BRIDGE_PUB_FILE
+    if not BRIDGE_KEY_FILE.exists():
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+        k = ec.generate_private_key(ec.SECP256K1())
+        BRIDGE_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(BRIDGE_KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(f"{k.private_numbers().private_value:064x}")
+        BRIDGE_PUB_FILE.write_text(k.public_key().public_bytes(serialization.Encoding.X962,
+                                   serialization.PublicFormat.UncompressedPoint).hex())
+    return evidence_sig.sign(raw, BRIDGE_KEY_FILE.read_text(encoding="utf-8").strip())
 
 
 def _post(url, key, path, payload, sign=False):
     raw = json.dumps(payload).encode()
     headers = {"Content-Type": "application/json", "X-Internal-Key": key}
     if sign:
-        headers["X-Verifier-Signature"] = _verifier_signature(raw)
+        headers["X-Verifier-Signature"] = _bridge_signature(raw)
     req = urllib.request.Request(url + path, data=raw, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as r:

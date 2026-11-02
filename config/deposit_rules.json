@@ -3,6 +3,8 @@
  "_aggregation_note": "Summing across programme levels offered is our reading for multi-programme institutions; confirm with AICTE before production.",
  "unit_rupees": 100000,
  "term_years": 10,
+ "retention_years_after_closure": 10,
+ "_retention_note": "Records of a released or renewed deposit are kept this long, then archived (read-only). Our reading; AICTE to confirm the retention period.",
  "leased_multiplier": 2,
  "aggregation": "sum",
  "levels": {

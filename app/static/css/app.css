@@ -486,3 +486,11 @@ ol.tl li { display: grid; grid-template-columns: 170px 1fr; gap: 14px; padding: 
 .bp-in { width: 120px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line-2); background: #0d0d10; color: var(--ink); font: 13px var(--mono, monospace); }
 
 .pager { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+
+/* evidence matrix: source labels */
+.src { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 12.5px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; }
+.src-crypto { color: var(--mint); border-color: rgba(166,243,210,.35); }
+.src-branch, .src-eadvice { color: var(--violet); border-color: rgba(139,108,255,.4); }
+.src-unproven { color: var(--amber); border-color: rgba(255,207,112,.35); border-style: dashed; }
+.src-declared { color: var(--ink-3, #8a8a93); border-style: dashed; }
+table.em th[scope=row] { text-align: left; font-weight: 500; }

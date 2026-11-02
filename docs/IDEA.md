@@ -187,7 +187,7 @@ A proven contradiction outranks an unknown elsewhere. Decision rules: `app/polic
 | Data per proof | about 39 MB between prover and verifier | Measured |
 | Bad deposits caught | 119 / 119 (an upload-and-approve baseline approved all 119) | Measured, 180 fresh synthetic deposits |
 | Honest deposits wrongly accused | 0 / 61 | Measured, same run |
-| Automated tests | 293 pass (283 demo mode + 10 production mode), 2 deployment-only skipped | `scripts/test_all.sh`, 1 Nov 2026 |
+| Automated tests | 298 pass (288 demo mode + 10 production mode), 2 deployment-only skipped | `scripts/test_all.sh`, 1 Nov 2026 |
 | Real TLS sessions | 13 / 16 public pages at 6 Indian banks | Measured; public pages |
 | Live real-bank MPC-TLS session | Logged-in deposits API, HTTP 200 OK in 0.4 s, 61 MB (first bank tested: SBI) | Measured |
 | Software licence cost | ₹0 | Estimate |

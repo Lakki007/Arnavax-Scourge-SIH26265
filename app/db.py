@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS fdrs(
   id TEXT PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id),
   fd_number TEXT NOT NULL UNIQUE, bank_host TEXT NOT NULL, principal TEXT NOT NULL,
   issue_date TEXT NOT NULL, maturity TEXT NOT NULL, created_at REAL NOT NULL, created_by TEXT NOT NULL,
-  released_at REAL, renews_fdr_id TEXT);
+  released_at REAL, renews_fdr_id TEXT, archived_at REAL, archived_by TEXT);
 CREATE TABLE IF NOT EXISTS challenges(
   id TEXT PRIMARY KEY, fdr_id TEXT NOT NULL REFERENCES fdrs(id), institution_id TEXT NOT NULL,
   token TEXT NOT NULL, token_sha256 TEXT NOT NULL, issued_at REAL NOT NULL, expires_at REAL NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS evidence(
   id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id TEXT NOT NULL UNIQUE REFERENCES challenges(id),
   fdr_id TEXT NOT NULL, received_at REAL NOT NULL, gate TEXT NOT NULL, reason TEXT, decision TEXT NOT NULL,
   facts_json TEXT NOT NULL, match_json TEXT NOT NULL, metrics_json TEXT NOT NULL,
-  facts_raw TEXT, verifier_sig TEXT, verifier_key TEXT);
+  facts_raw TEXT, verifier_sig TEXT, verifier_key TEXT, channel TEXT);
 CREATE TABLE IF NOT EXISTS actions(
   id INTEGER PRIMARY KEY AUTOINCREMENT, fdr_id TEXT NOT NULL, evidence_id INTEGER,
   action TEXT NOT NULL CHECK(action IN ('accept','escalate','release')), note TEXT, actor TEXT NOT NULL, at REAL NOT NULL);
@@ -136,11 +136,13 @@ def _migrate(c):
         if col not in ncols:
             c.execute(f"ALTER TABLE notifications ADD COLUMN {col} {typ}")
     ecols = {r[1] for r in c.execute("PRAGMA table_info(evidence)")}
-    for col in ("facts_raw", "verifier_sig", "verifier_key"):
+    for col in ("facts_raw", "verifier_sig", "verifier_key", "channel"):
         if col not in ecols:
             c.execute(f"ALTER TABLE evidence ADD COLUMN {col} TEXT")
-    if "renews_fdr_id" not in {r[1] for r in c.execute("PRAGMA table_info(fdrs)")}:
-        c.execute("ALTER TABLE fdrs ADD COLUMN renews_fdr_id TEXT")
+    fcols = {r[1] for r in c.execute("PRAGMA table_info(fdrs)")}
+    for col, typ in (("renews_fdr_id", "TEXT"), ("archived_at", "REAL"), ("archived_by", "TEXT")):
+        if col not in fcols:
+            c.execute(f"ALTER TABLE fdrs ADD COLUMN {col} {typ}")
 
 
 def q(sql, args=()):
