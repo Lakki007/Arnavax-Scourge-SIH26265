@@ -27,5 +27,11 @@ services:
     volumes: ["scourge-var:/srv/scourge/var", "./backups:/backups"]
     entrypoint: ["sh", "-c", "f=/backups/scourge-$$(date +%Y%m%d-%H%M%S).tar.gz && python3 scripts/backup.py create $$f && python3 scripts/backup.py verify $$f"]
 
+  tests:                         # the full demo + production test run, inside Linux: docker compose --profile ops run --rm tests
+    build: .
+    platform: linux/amd64
+    profiles: ["ops"]
+    entrypoint: ["./scripts/test_all.sh"]
+
 volumes:
   scourge-var:
