@@ -75,3 +75,26 @@ def pytest_unconfigure(config):
             _proc.wait(10)
         except (OSError, subprocess.TimeoutExpired):
             os.killpg(_proc.pid, signal.SIGKILL)
+
+
+CORE = ("test_acceptance.py", "test_evidence_boundary.py", "test_lifecycle_edges.py", "test_extension_bridge.py", "test_ui_journey.py")
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Say plainly whether the central proof path ran. A run where it was skipped is not evidence for it."""
+    def core(reps):
+        return [r for r in reps if any(c in r.nodeid for c in CORE)]
+    ran = core(terminalreporter.stats.get("passed", []))
+    skipped = core(terminalreporter.stats.get("skipped", []))
+    w = terminalreporter.write_line
+    if skipped and not ran:
+        w("")
+        w("=" * 78, red=True, bold=True)
+        w(f"  CORE PROOF TESTS DID NOT RUN ({len(skipped)} skipped): the portal, verifier or proof binaries", red=True, bold=True)
+        w("  are not available on this machine, so this run says nothing about the bank-proof path.", red=True, bold=True)
+        w("  Run them with:  scourge test (Windows)  |  docker compose --profile ops run --rm tests", red=True)
+        w("                  or build binaries: ./scripts/build_rust.sh, then python3 -m pytest tests", red=True)
+        w("=" * 78, red=True, bold=True)
+    elif ran:
+        w(f"[scourge] core proof path: {len(ran)} tests passed through the real prover, signing verifier and synthetic bank"
+          + (f"; {len(skipped)} skipped" if skipped else ""), green=not skipped, yellow=bool(skipped))

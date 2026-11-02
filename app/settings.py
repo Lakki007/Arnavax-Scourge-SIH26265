@@ -40,6 +40,10 @@ VERIFIER_MODE = os.environ.get("SCOURGE_VERIFIER", "local")
 # The verifier signs every result with its own key. The portal pins its public key: SCOURGE_VERIFIER_PUBKEY (hex),
 # else the file the verifier publishes (local mode: next to the key in var/; external mode: a read-only mount).
 VERIFIER_KEY_FILE = Path(os.environ.get("SCOURGE_VERIFIER_KEY", VAR / "verifier_signing.key"))
+# The browser-extension bridge has its OWN key. Results it signs are recorded as "extension, unproven" and are
+# capped below Verified until the extension's MPC proof exists; it never holds the verifier key.
+BRIDGE_KEY_FILE = Path(os.environ.get("SCOURGE_BRIDGE_KEY", VAR / "extension_bridge.key"))
+BRIDGE_PUB_FILE = Path(str(BRIDGE_KEY_FILE).removesuffix(".key") + ".pub")
 VERIFIER_PUB_FILE = Path(os.environ.get("SCOURGE_VERIFIER_PUBKEY_FILE", str(VERIFIER_KEY_FILE).removesuffix(".key") + ".pub"))
 VERIFIER_ADDR = os.environ.get("SCOURGE_VERIFIER_ADDR", VERIFIER_CFG["verifier_listen"])
 

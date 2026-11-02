@@ -1,0 +1,56 @@
+{
+ "note": "emulated link between prover and verifier on one machine; synthetic bank",
+ "runs_per_profile": 3,
+ "profiles": [
+  {
+   "profile": "lan_1gbps_2ms",
+   "mbps": 1000,
+   "rtt_ms": 2,
+   "verified": "3/3",
+   "seconds_median": 2.1,
+   "seconds_max": 3.1,
+   "MB_up_median": 38.7,
+   "MB_down_median": 2.3
+  },
+  {
+   "profile": "office_100mbps_30ms",
+   "mbps": 100,
+   "rtt_ms": 30,
+   "verified": "3/3",
+   "seconds_median": 6.4,
+   "seconds_max": 6.4,
+   "MB_up_median": 38.7,
+   "MB_down_median": 2.3
+  },
+  {
+   "profile": "broadband_50mbps_40ms",
+   "mbps": 50,
+   "rtt_ms": 40,
+   "verified": "3/3",
+   "seconds_median": 10.0,
+   "seconds_max": 10.2,
+   "MB_up_median": 38.7,
+   "MB_down_median": 2.3
+  },
+  {
+   "profile": "broadband_20mbps_60ms",
+   "mbps": 20,
+   "rtt_ms": 60,
+   "verified": "3/3",
+   "seconds_median": 20.8,
+   "seconds_max": 20.8,
+   "MB_up_median": 38.7,
+   "MB_down_median": 2.3
+  },
+  {
+   "profile": "slow_10mbps_80ms",
+   "mbps": 10,
+   "rtt_ms": 80,
+   "verified": "3/3",
+   "seconds_median": 37.9,
+   "seconds_max": 37.9,
+   "MB_up_median": 38.7,
+   "MB_down_median": 2.3
+  }
+ ]
+}

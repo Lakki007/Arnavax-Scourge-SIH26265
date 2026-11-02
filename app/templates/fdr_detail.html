@@ -87,6 +87,36 @@
 {% if latest and latest.decision == 'rejected' %}<p class="note note-bad" style="margin-top:16px"><b>The latest proof was rejected:</b> {{ reason }} Nothing it contained is treated as the bank's word.</p>{% endif %}
 {% if latest and latest.decision == 'insufficient_evidence' and reason %}<p class="note note-warn" style="margin-top:16px"><b>Not enough to decide:</b> {{ reason }}</p>{% endif %}
 
+{# ---- evidence matrix: what we know, how we know it, what is unresolved ---- #}
+<section class="panel" id="evidence-matrix" style="margin-top:20px;padding:20px" aria-labelledby="em-h">
+  <h2 id="em-h" style="margin-top:0">What we know, and how we know it</h2>
+  <div class="table-wrap"><table class="em"><thead><tr><th scope="col">Field</th><th scope="col">Register says</th><th scope="col">Evidence</th><th scope="col">Source</th></tr></thead><tbody>
+  {% for r in em.rows %}<tr data-field="{{ r.key }}" data-kind="{{ r.kind }}">
+    <th scope="row">{{ r.label }}</th><td class="small">{{ r.claim }}</td>
+    <td><span class="st {{ {'match':'st-confirmed','mismatch':'st-discrepancy'}.get(r.result, 'st-insufficient_evidence') }}">{{ r.state }}</span>{% if r.value %} <span class="mono small">{{ r.value }}</span>{% endif %}</td>
+    <td><span class="src src-{{ r.kind }}">{{ r.source }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  <p class="small" id="em-summary">
+    {% if em.as_of %}Evidence from {{ when(em.as_of) }} ({{ em.age_days }} days old): <b>{{ 'fresh' if em.fresh else 'expired' }}</b> (valid {{ em.valid_days }} days).{% else %}<b>No bank evidence yet.</b>{% endif %}
+    {% if em.unresolved %} Unresolved: {{ em.unresolved|join(', ') }}.{% endif %}
+    Release: <b>{{ 'allowed' if em.release_allowed else 'blocked' }}</b>{% if not em.release_allowed and em.release_reason %} ({{ em.release_reason }}){% endif %}.
+  </p>
+  <p class="muted small">{{ em.note }}</p>
+</section>
+
+{# ---- retention: archive after closure, legal hold ---- #}
+{% if ret.state != 'open' %}
+<section class="panel" id="retention" style="margin-top:20px;padding:20px" data-state="{{ ret.state }}">
+  <h2 style="margin-top:0">Record retention</h2>
+  <p class="small">{% if ret.state == 'archived' %}Archived {{ when(f.archived_at) }} by {{ f.archived_by }}. The record is read-only.{% elif ret.state == 'archival_due' %}Retention period over: this closed record can be archived.{% else %}{{ ret.why }}{% endif %}</p>
+  {% if s.role == 'officer' and ret.state != 'archived' %}<div class="actions">
+    {% if ret.can %}<form method="post" action="/fdrs/{{ f.id }}/archive" class="actions"><input type="hidden" name="csrf" value="{{ s.csrf }}">{% if officer_mfa %}<input name="otp" inputmode="numeric" maxlength="6" placeholder="2FA code" aria-label="Authenticator code" required style="width:110px">{% endif %}<button class="btn btn-solid">Archive record</button></form>{% endif %}
+    {% if not b.hold %}<form method="post" action="/fdrs/{{ f.id }}/hold" class="actions"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input name="reason" minlength="10" required placeholder="Legal hold reason (e.g. court case no.)" aria-label="Legal hold reason" style="min-width:260px"><button class="btn btn-ghost">Place legal hold</button></form>
+    {% else %}<form method="post" action="/fdrs/{{ f.id }}/hold/lift" class="actions"><input type="hidden" name="csrf" value="{{ s.csrf }}"><input name="note" minlength="10" required placeholder="Why the legal hold is lifted" aria-label="Reason for lifting" style="min-width:240px"><button class="btn btn-ghost">Lift legal hold</button></form>{% endif %}
+  </div>{% endif %}
+</section>
+{% endif %}
+
 {# ---- release clearance and signatures ---- #}
 {% if b.release_request %}{% set rr = b.release_request %}
 <section class="panel" id="release" style="margin-top:20px;padding:20px">

@@ -14,6 +14,10 @@ Every row is enforced server-side and has an automated test. File paths are rela
 | Lien read exactly per bank; unknown wording never Verified; missing lien is Insufficient | `app/policy.py`, `lien_rules` in `config/scourge.json` | `test_policy.py::test_v01…test_v11`, `test_lien_not_shown_is_unknown_not_clear` |
 | Money compared in integer paise; holders compared whole | `app/policy.py` | `test_money_is_exact_paise`, `test_holder_is_compared_whole` |
 | Fallback evidence cannot override a proven discrepancy | e-advice / branch tiers | `test_branch_cannot_override_session_discrepancy`, `test_forged_or_altered_eadvice_is_rejected` |
+| Verifier signs every result (ECDSA secp256k1, key on the verifier host); portal pins the key and refuses unsigned, forged or re-pointed results, so the internal key alone cannot inject evidence | `app/evidence_sig.py`, `rust/verifierd.rs` | `test_evidence_boundary.py::test_b1`, `test_b3`, `test_b4` |
+| An administrator who rewrites stored evidence or decisions is detected: every result re-verified against its signature and its decision recomputed | `scripts/audit_evidence.py` | `test_evidence_boundary.py::test_b2` |
+| Extension bridge holds its own key, never the verifier's; its results are labelled unproven and can never reach Verified | `tools/extension/bridge.py`, `evidence_sig.cap` | `test_extension_bridge.py`, `test_b5` |
+| Retention: legal hold blocks archiving; archived records refuse every change | `retention()`, `archived_is_frozen` in `app/main.py` | `test_lifecycle_edges.py::test_e4` |
 
 | Verifier deployable independently; portal cannot start/stop it; internal API on a private network with a shared key | `SCOURGE_VERIFIER=external`, `deploy/nginx.internal.conf`, `deploy/compose.two-host.yml` | `test_external_verifier_mode_is_never_started_or_stopped_by_the_portal`, CI `two-host` |
 

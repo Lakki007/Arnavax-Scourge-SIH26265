@@ -161,3 +161,63 @@ def next_action(b, gates, who=None):
                 "text": "You can propose the release; a second officer approves it. Or request a fresh proof first."}
     return {"kind": "request", "title": "Only paper vouches for this deposit",
             "text": "Ask the institution to prove it from its bank's server. It takes about a second once they answer."}
+
+
+# ---------------------------------------------------------------- evidence matrix
+# "What do we know, how do we know it, what is unresolved?" One row per field the release depends on.
+SOURCES = {
+    "mpc_tls": ("Bank session · cryptographic proof", "crypto"),
+    "extension_unproven": ("Browser extension · not yet proven", "unproven"),
+    "branch_confirmation": ("Bank branch · signed link", "branch"),
+    "eadvice": ("Bank-signed e-advice", "eadvice"),
+    "declared": ("Institution · declared only", "declared"),
+}
+STATE_TEXT = {"match": "Confirmed", "mismatch": "Contradicted", "not_exposed": "Unknown: not shown",
+              "unrecognised": "Unknown: not recognised", "ambiguous": "Unknown: ambiguous", "unparseable": "Unknown: unreadable",
+              "unsupported": "Unknown: unsupported", "not_checked": "Shown, not checked"}
+
+
+def _channel(e):
+    import json as _j
+    facts = _j.loads(e["facts_json"])
+    if facts.get("tier") == "branch_confirmation":
+        return "branch_confirmation"
+    return e.get("channel") or facts.get("channel") or "mpc_tls"
+
+
+def evidence_matrix(b, gates, valid_days):
+    import json as _j
+    latest = b["evidence"][0] if b["evidence"] else None
+    now = time.time()
+    rows, src_key, age_days = [], "declared", None
+    match = {}
+    if latest and latest["decision"] != "rejected":
+        src_key = _channel(latest)
+        match = _j.loads(latest["match_json"])
+        age_days = (now - latest["received_at"]) / 86400
+    ea = b.get("eadvice") or {}
+    filled = set(ea.get("filled") or [])
+    for key, label, claim in ROWS:
+        m = match.get(key) or {}
+        k = src_key
+        if key in filled:
+            k, m = "eadvice", (ea.get("match") or {}).get(key) or {}
+        res = m.get("result")
+        if not res:
+            k = "declared"
+        state = STATE_TEXT.get(res, "Declared only") if res else "Declared only"
+        rows.append({"key": key, "label": label, "claim": claim(b["f"]), "value": m.get("proven"),
+                     "source": SOURCES[k][0], "kind": SOURCES[k][1], "result": res or "declared", "state": state})
+    lien = next(r for r in rows if r["key"] == "lien")
+    enc_known = lien["result"] == "match" and lien["kind"] in ("crypto", "branch", "eadvice")
+    rows.append({"key": "encumbrance", "label": "Other loans or liens", "claim": "none", "value": None,
+                 "source": lien["source"] if enc_known else SOURCES["declared"][0], "kind": lien["kind"] if enc_known else "declared",
+                 "result": "match" if enc_known else "declared",
+                 "state": "None shown in the bank's lien field" if enc_known else "Unknown: silence is not evidence"})
+    fresh = age_days is not None and age_days <= valid_days
+    unresolved = [r["label"] for r in rows if r["result"] != "match"]
+    rel_ok, rel_why = gates.get("release", (False, ""))
+    return {"rows": rows, "as_of": latest["received_at"] if latest and src_key != "declared" else None,
+            "age_days": round(age_days, 1) if age_days is not None else None, "fresh": fresh, "valid_days": valid_days,
+            "unresolved": unresolved, "release_allowed": bool(rel_ok), "release_reason": rel_why,
+            "note": "A proof shows what the bank returned at that moment; Scourge re-asks when it expires. It is not continuous bank surveillance."}

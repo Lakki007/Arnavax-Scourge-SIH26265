@@ -70,3 +70,39 @@ def test_e3_scheduler_offline_for_a_week_catches_up_once(off):
     assert esc() == {"officer": 2, "regional_head": 2, "authority": 2}
     assert db().execute("SELECT COUNT(*) FROM notifications WHERE fdr_id='FDR-002' AND kind='overdue_escalation'").fetchone()[0] == 6
     assert db().execute("SELECT COUNT(*) FROM notifications").fetchone()[0] >= n
+
+
+def _released(off, fd):
+    fid, letter = T._issued(off, fd)
+    assert T._complete(S("officer:RB-04"), fid, letter, T.FD[fid], ack=T._ack(letter, T.FD[fid], n=9)).status_code == 303
+    return fid
+
+
+def test_e4_retention_legal_hold_and_archive(off):
+    """A closed record is kept for the retention period, a legal hold blocks archiving, an archived record is frozen."""
+    fid = _released(off, "FD-0000990620")
+    assert off.post(f"/fdrs/{fid}/archive").status_code == 409                 # still inside the retention period
+    c = db(); c.execute("UPDATE fdrs SET released_at=released_at-11*365.25*86400 WHERE id=?", (fid,)); c.commit()
+    assert off.post(f"/fdrs/{fid}/hold", reason="Court case W.P. 1234/2036 pending").status_code == 303
+    assert off.post(f"/fdrs/{fid}/archive").status_code == 409                 # legal hold blocks archiving
+    assert off.post(f"/fdrs/{fid}/hold/lift", note="Case disposed of on 1 Feb 2037").status_code == 303
+    assert off.post(f"/fdrs/{fid}/archive").status_code == 303
+    assert db().execute("SELECT archived_at IS NOT NULL FROM fdrs WHERE id=?", (fid,)).fetchone()[0] == 1
+    assert off.post(f"/fdrs/{fid}/hold", reason="Another attempt to change it").status_code == 409   # frozen
+    assert off.post(f"/fdrs/{fid}/challenge").status_code == 409
+    assert "record_archived" in [r[0] for r in db().execute("SELECT kind FROM events WHERE fdr_id=?", (fid,))]
+
+
+def test_e5_open_deposit_cannot_be_archived(off):
+    assert off.post("/fdrs/FDR-001/archive").status_code == 409
+
+
+def test_e6_evidence_matrix_says_what_is_known_and_how(off):
+    T._confirmed(off, "FDR-001")
+    m = off.c.get(T.B + "/api/fdrs/FDR-001/evidence-matrix").json()
+    rows = {r["key"]: r for r in m["rows"]}
+    assert rows["principal"]["kind"] == "crypto" and rows["principal"]["state"] == "Confirmed"
+    assert rows["encumbrance"]["result"] == "match"
+    assert m["fresh"] is True
+    inst2 = S("institution:INST-77")
+    assert inst2.c.get(T.B + "/api/fdrs/FDR-001/evidence-matrix").status_code == 404   # scoped like the page

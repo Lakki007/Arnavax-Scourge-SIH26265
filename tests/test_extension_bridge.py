@@ -57,11 +57,19 @@ def _decision(cid):
     return sqlite3.connect(T.DB).execute("SELECT decision, reason FROM evidence WHERE challenge_id=?", (cid,)).fetchone()
 
 
-def test_bridged_good_record_verifies(off):
+def test_bridged_good_record_is_never_verified(off):
+    """A decrypted record without a TLS proof cannot clear a deposit, however good it looks."""
     cid, token, inst = _challenge(off, "FDR-002")
     out = bridge.post_record(B, _key(), cid, inst, token, HOST, _record("FD-0000777777"))
-    assert out["decision"] == "verified", out
-    assert _decision(cid)[0] == "verified"
+    assert out["decision"] == "insufficient_evidence", out
+    assert _decision(cid) == ("insufficient_evidence", "extension_proof_not_yet_available")
+    ch = sqlite3.connect(T.DB).execute("SELECT channel FROM evidence WHERE challenge_id=?", (cid,)).fetchone()[0]
+    assert ch == "extension_unproven"
+
+
+def test_bridge_does_not_hold_the_verifier_key():
+    src = open(os.path.join(ROOT, "tools", "extension", "bridge.py")).read()
+    assert "VERIFIER_KEY_FILE" not in src
 
 
 def test_bridged_loan_lien_is_discrepancy(off):
@@ -89,7 +97,8 @@ def test_bridge_wraps_a_record_nested_in_a_list(off):
     cid, token, inst = _challenge(off, "FDR-002")
     body = {"accounts": [_record("FD-0000123456", status="CLOSED"), _record("FD-0000777777")]}
     out = bridge.post_record(B, _key(), cid, inst, token, HOST, body)
-    assert out["decision"] == "verified", out
+    # the right object was found: every field matches, only the missing TLS proof holds it back
+    assert _decision(cid) == ("insufficient_evidence", "extension_proof_not_yet_available"), out
 
 
 def test_consumed_challenge_cannot_be_bridged_twice(off):

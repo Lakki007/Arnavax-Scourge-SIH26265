@@ -57,6 +57,8 @@ So the extension work is: (plugin + key disclosure) → verifier produces these 
 
 ## Build order
 
-1. **Bridge — DONE.** `tools/extension/bridge.py` turns a decrypted deposit record into the portal's facts and posts it; `tests/test_extension_bridge.py` (6 tests) drives it against the running portal and checks every verdict: verified, discrepancy on a loan lien, insufficient on a missing lien, rejected on the wrong FD, a record nested in a list as SBI returns it, and no replay of a consumed challenge.
+1. **Bridge — built, deliberately untrusted.** `tools/extension/bridge.py` turns a decrypted deposit record into the portal's facts and posts it. It signs with its **own** key, never the verifier's, and the portal records its results as *extension, unproven*: they can flag a problem (a loan lien gives *Discrepancy*) but are capped at *Insufficient evidence*, so a decrypted JSON object can never clear a deposit on its own. `tests/test_extension_bridge.py` checks the mapping (wrong FD rejected, missing lien insufficient, record nested in a list, no replay) and the cap.
+
+**Open engineering obligations before the extension can reach Verified** (to be reviewed outside the team): the verifier must establish (a) the approved bank host and authenticated transcript, (b) challenge and deposit binding, (c) the link between the proven ciphertext, the page's app-layer decryption and the resulting plaintext, (d) which fields were disclosed or missing, (e) freshness and replay protection. TLSNotary's `prove()` opens its own connection and sends a request; notarising the page's existing request without re-sending it is a design goal still to be demonstrated, and TLS 1.2 / WebSocket-to-TCP transport limits must be checked per bank.
 2. **Plugin.** Notarise the page's own deposit request; end-to-end into the portal through the bridge.
 3. **Session-key disclosure for SBI.** Read the record with the page's own key, inside the verifier only.

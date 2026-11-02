@@ -218,6 +218,21 @@ async def cap_body(request: Request, call_next):
     return await call_next(request)
 
 
+FDR_POST = re.compile(r"^/fdrs/([^/]+)/(.+)$")
+
+
+@app.middleware("http")
+async def archived_is_frozen(request: Request, call_next):
+    """An archived record is read-only: every change to it is refused, whatever the route."""
+    if request.method == "POST":
+        m = FDR_POST.match(request.url.path)
+        if m:
+            row = db.q1("SELECT archived_at FROM fdrs WHERE id=?", (m.group(1),))
+            if row and row["archived_at"]:
+                return PlainTextResponse("This record is archived and read-only.", status_code=409)
+    return await call_next(request)
+
+
 # ----------------------------------------------------------------- errors
 @app.exception_handler(RequestValidationError)
 async def bad_input(request: Request, exc: RequestValidationError):
@@ -541,7 +556,7 @@ def fdr_detail(request: Request, fid: str):
     latest_facts = json.loads(latest["facts_json"]) if latest else {}
     return render(request, "fdr_detail.html", s, b=b, latest=latest, latest_match=latest_match, latest_facts=latest_facts, gates=gates,
                   challenges=chall, events=events, jobs=jobs_, now=time.time(), bank_dep=bank_dep,
-                  cvw=views.claim_vs_witness(b["f"], latest_match), nxt=views.next_action(b, gates, auth.officer_id(s) if s["role"] == "officer" else None),
+                  cvw=views.claim_vs_witness(b["f"], latest_match), em=views.evidence_matrix(b, gates, DEMO["confirmation_valid_days"]), ret=retention(b), nxt=views.next_action(b, gates, auth.officer_id(s) if s["role"] == "officer" else None),
                   officer_mfa=bool(s["role"] == "officer" and db.q1("SELECT 1 AS x FROM officer_mfa WHERE officer=? AND enabled=1", (auth.officer_id(s),))),
                   rc=receipt_for(s, latest, latest_facts) if latest else None,
                   reason=policy.reason_text(latest["reason"], latest_facts) if latest and latest["reason"] else "")
@@ -995,10 +1010,11 @@ def release_revoke(request: Request, fid: str, csrf: str = Form(""), reason: str
 def place_hold(request: Request, fid: str, csrf: str = Form(""), reason: str = Form("")):
     s = officer_post(request, csrf)
     b = get_fdr_or_404(s, fid)
-    if b["f"]["released_at"]:
-        raise HTTPException(409, "Already released.")
+    if b["f"].get("archived_at"):
+        raise HTTPException(409, "Archived records are frozen.")
     if b["hold"]:
         raise HTTPException(409, "A hold is already active.")
+    # on a released or renewed record the same hold is a LEGAL HOLD: it blocks archiving until lifted
     reason = reason.strip()
     if len(reason) < 10:
         raise HTTPException(422, "Give a reason of at least 10 characters (e.g. the pending case or grievance).")
@@ -1020,6 +1036,42 @@ def lift_hold(request: Request, fid: str, csrf: str = Form(""), note: str = Form
     who = auth.officer_id(s)
     db.x("UPDATE holds SET lifted_by=?, lifted_at=?, lift_note=? WHERE id=?", (who, time.time(), note[:300], b["hold"]["id"]))
     db.event(f"officer:{who}", "hold_lifted", fid, hold=b["hold"]["id"], note=note[:300])
+    return RedirectResponse(f"/fdrs/{fid}", 303)
+
+
+# ----------------------------------------------------------------- retention: archive after closure, legal hold
+def retention(b):
+    """When a closed record becomes due for archiving, and whether it can be archived now."""
+    f = b["f"]
+    closed_at = f["released_at"]
+    if not closed_at and b.get("successor") and b["status"][0] == "renewed":
+        sc = db.q1("SELECT created_at FROM fdrs WHERE id=?", (b["successor"]["id"],))
+        closed_at = sc["created_at"] if sc else None
+    if f.get("archived_at"):
+        return {"state": "archived", "closed_at": closed_at, "due": None, "can": False, "why": "Archived (read-only)."}
+    if not closed_at:
+        return {"state": "open", "closed_at": None, "due": None, "can": False, "why": "Only a released or renewed record can be archived."}
+    years = lifecycle.RULES.get("retention_years_after_closure", 10)
+    due = closed_at + years * 365.25 * 86400
+    if b.get("hold"):
+        return {"state": "legal_hold", "closed_at": closed_at, "due": due, "can": False, "why": f"Legal hold: {b['hold']['reason']}"}
+    if time.time() < due:
+        return {"state": "retained", "closed_at": closed_at, "due": due, "can": False,
+                "why": f"Kept for {years} years after closure; archival due {time.strftime('%d %b %Y', time.localtime(due))}."}
+    return {"state": "archival_due", "closed_at": closed_at, "due": due, "can": True, "why": ""}
+
+
+@app.post("/fdrs/{fid}/archive")
+def archive_fdr(request: Request, fid: str, csrf: str = Form(""), otp: str = Form("")):
+    s = officer_post(request, csrf)
+    b = get_fdr_or_404(s, fid)
+    r = retention(b)
+    if not r["can"]:
+        raise HTTPException(409, r["why"])
+    step_up(s, otp)
+    who = auth.officer_id(s)
+    db.x("UPDATE fdrs SET archived_at=?, archived_by=? WHERE id=? AND archived_at IS NULL", (time.time(), who, fid))
+    db.event(f"officer:{who}", "record_archived", fid, closed_at=r["closed_at"])
     return RedirectResponse(f"/fdrs/{fid}", 303)
 
 
@@ -1201,6 +1253,14 @@ def job_page(request: Request, jid: str):
     return render(request, "job.html", s, j=j, f=f, mode=json.loads(j["mode_json"]))
 
 
+@app.get("/api/fdrs/{fid}/evidence-matrix")
+def evidence_matrix_api(request: Request, fid: str):
+    """Per-field evidence status for one deposit: value, source, state, freshness, release gate. Same scoping as the page."""
+    s = auth.require(request)
+    b = get_fdr_or_404(s, fid)
+    return views.evidence_matrix(b, action_gates(b), DEMO["confirmation_valid_days"])
+
+
 @app.get("/api/jobs/{jid}")
 def job_api(request: Request, jid: str):
     s = auth.require(request)
@@ -1268,7 +1328,7 @@ async def consume(request: Request):
 async def post_evidence(request: Request):
     internal(request)
     raw = await request.body()
-    ok, key_fp, why = evidence_sig.check(raw, request.headers.get("x-verifier-signature", ""))
+    ok, key_fp, why, channel = evidence_sig.check_any(raw, request.headers.get("x-verifier-signature", ""))
     if not ok:
         db.event("anonymous", "evidence_refused", None, reason=why)
         raise HTTPException(403, f"evidence refused: {why}")
@@ -1284,14 +1344,19 @@ async def post_evidence(request: Request):
         raise HTTPException(409, "evidence already recorded for this challenge")
     fdr = db.q1("SELECT * FROM fdrs WHERE id=?", (c["fdr_id"],))
     decision, match = policy.apply(facts, fdr)
+    decision, capped = evidence_sig.cap(decision, channel)
+    if capped:
+        facts["reason"] = capped
+    facts["channel"] = channel
     metrics = facts.pop("metrics", {})
     if decision == "insufficient_evidence" and not facts.get("reason"):
         missing = [k for k, v in match.items() if v["result"] in ("not_exposed", "ambiguous", "unrecognised", "unparseable", "unsupported")]
         facts["reason"] = "required_field_unknown:" + ",".join(missing) if missing else None
-    eid = db.x("INSERT INTO evidence(challenge_id,fdr_id,received_at,gate,reason,decision,facts_json,match_json,metrics_json,facts_raw,verifier_sig,verifier_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+    eid = db.x("INSERT INTO evidence(challenge_id,fdr_id,received_at,gate,reason,decision,facts_json,match_json,metrics_json,facts_raw,verifier_sig,verifier_key,channel) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                (cid, fdr["id"], time.time(), facts.get("gate", "rejected"), facts.get("reason"), decision, json.dumps(facts), json.dumps(match), json.dumps(metrics),
-                raw.decode("utf-8"), request.headers.get("x-verifier-signature"), key_fp))
-    db.event("verifier", "evidence_recorded", fdr["id"], evidence_id=eid, decision=decision, reason=facts.get("reason"), verifier_key=key_fp)
+                raw.decode("utf-8"), request.headers.get("x-verifier-signature"), key_fp, channel))
+    db.event("verifier" if channel == evidence_sig.MPC else "extension_bridge", "evidence_recorded", fdr["id"], evidence_id=eid, decision=decision,
+             reason=facts.get("reason"), verifier_key=key_fp, channel=channel)
     return {"evidence_id": eid, "decision": decision}
 
 
