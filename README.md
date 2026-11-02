@@ -116,7 +116,7 @@ If a portal is already running on 127.0.0.1:8080, the tests use it instead of st
 | Backup and recovery | Online backup, checksummed archive, verified restore (`scripts/backup.py`) |
 | Live real-bank MPC-TLS session | **Real**: logged-in deposits API, 200 OK in 0.4 s, 61 MB (first bank tested: SBI) |
 | App-encrypted banks (e.g. SBI) | In-browser prover: design in `docs/EXTENSION_PROVER.md`; verifier→portal bridge built and tested (`tests/test_extension_bridge.py`) |
-| Speed and cost per proof | 0.4 s and 61 MB on the real bank; 60 MB at a 4 KB request budget against public roots (`tools/realbank/BUDGETS.md`) |
+| Speed and cost per proof | 61 MB on the real bank (prover and verifier in one process, so its 0.4 s is not deployment latency; see `docs/OPERATIONS.md` for ~10 s at 50 Mbit/s); 60 MB at a 4 KB request budget against public roots (`tools/realbank/BUDGETS.md`) |
 
 ## Audit changes (29 Oct)
 

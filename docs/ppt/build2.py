@@ -303,14 +303,14 @@ for lab, col in [("Verified", MINT), ("Discrepancy", CORAL), ("Insufficient evid
 # hero: video card
 vx, vy, vw, vh = 9.05, 2.85, R - 9.05, 3.92
 rect(s3, vx, vy, vw, vh, fill=INK, r=0.06)
-tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE 3-MINUTE DEMO", {"f": H, "b": True, "s": 11, "c": MINT})]])
+tx(s3, vx + 0.25, vy + 0.18, vw - 0.5, 0.35, [[("WATCH THE 8-MINUTE DEMO", {"f": H, "b": True, "s": 11, "c": MINT})]])
 mw = vw - 0.5; mh = mw * 9 / 16
 mv = s3.shapes.add_movie(VIDEO, Inches(vx + 0.25), Inches(vy + 0.6), Inches(mw), Inches(mh), poster_frame_image=POSTER, mime_type="video/mp4")
 mv.name = "Demo video"
 qy = vy + 0.6 + mh + 0.2
 qr = rect(s3, vx + 0.25, qy, 1.05, 1.05, fill=WHITE, r=0.08)
 qp = s3.shapes.add_picture(IMG + "qr_dark.png", Inches(vx + 0.3), Inches(qy + 0.05), Inches(0.95), Inches(0.95)); qp.click_action.hyperlink.address = DEMO_HREF
-tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Click to play here, or scan / click the QR for YouTube", {"s": 9.5, "b": True, "c": WHITE, "after": 3})],
+tx(s3, vx + 1.45, qy, vw - 1.65, 1.05, [[("Click to play a 98-second preview here; scan / click the QR for the full 8-minute demo", {"s": 9.5, "b": True, "c": WHITE, "after": 3})],
                                         [("Synthetic bank + live real-bank session", {"s": 9.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # ================================================================== 4  FEASIBILITY
@@ -332,15 +332,15 @@ for i, (ic, col, big, lab, note) in enumerate(tiles):
 rect(s4, L, 3.06, CW, 0.56, fill=INK, r=0.2)
 icon(s4, "FaBuildingColumns", L + 0.14, 3.15, 0.38, MINT, pad=0.22)
 tx(s4, L + 0.62, 3.06, 2.5, 0.56, [[("LIVE ON A REAL BANK", {"f": H, "b": True, "s": 11, "c": MINT})], [("First bank tested: SBI · 1 Nov 2026", {"s": 8.5, "c": GREY_L})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
-tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK","secs":0.4}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
+tx(s4, L + 3.05, 3.06, CW - 3.15, 0.56, [[('{"ok":true,"server":"api.onlineyono.sbi.bank.in","status_line":"HTTP/1.1 200 OK", ...}', {"f": "Courier New", "b": True, "s": 9.5, "c": WHITE})],
    [("Split-key session with a bank's logged-in deposits API (first bank tested: SBI); cert checked against public roots.  Log: tools/realbank/RESULTS.md", {"s": 8.5, "c": GREY_L, "i": True})]], anchor=MSO_ANCHOR.MIDDLE, lsp=0.95)
 
 pointer(s4, L, 3.72, 6.0, "Potential challenges and risks", color=CORAL)
 pointer(s4, 6.88, 3.72, 5.9, "Strategies for overcoming these challenges", color=MINT_D)
-risks = [("Bank page can't be proven, or hides the lien", "3-tier fallback: bank-signed e-advice, then branch; never a guess"),
+risks = [("Bank page can't be proven, or hides the lien", "Fallback: bank-signed e-advice, then branch confirmation, labelled weaker; never a guess"),
          ("Fake bank site or a replayed old proof", "Rejected: bank certificate + single-use, 15-min challenge"),
          ("Bank terms, consent and data protection", "Own login, per-deposit consent, record-only disclosure; legal review"),
-         ("Bank encrypts data inside HTTPS, or ties it to the browser", "Browser-extension prover; verifier gets the per-session app key")]
+         ("Bank encrypts data inside HTTPS, or ties it to the browser", "Browser-extension prover (in progress); until then, labelled fallback evidence")]
 ry = 4.13
 for r_, s_ in risks:
     rect(s4, L, ry, 6.1, 0.44, fill=CORAL_T, r=0.3)
