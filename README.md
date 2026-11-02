@@ -18,6 +18,7 @@ python3 -m pytest tests          # starts the portal, the verifier and the synth
 
 - **Platforms:** prebuilt proof binaries ship for **Linux x86-64** (`bin/`) and **macOS Apple Silicon** (`bin/darwin-arm64/`); the app picks the right set automatically. Any other platform: `./scripts/build_rust.sh` (Rust toolchain) builds its own set into `bin/<os>-<arch>/`.
 - **Docker:** `docker compose up -d` → http://localhost:8000 (works on Apple Silicon too).
+- **Hosted demo (no install):** see the link at the top of this README once published; built from this repo by `deploy/hf/` (Hugging Face Spaces, synthetic bank only).
 - **Windows:** install Docker Desktop, then double-click **`scourge.cmd`** (opens http://localhost:8000). Full test run: `scourge test` (demo + production suites, inside Linux). Stop: `scourge stop`. No Rust, Python or WSL needed.
 - **Any OS, tests only:** `docker compose --profile ops run --rm tests`.
 - **Click through:** `./scripts/run.sh` → http://127.0.0.1:8080 → *Start the demo*.
