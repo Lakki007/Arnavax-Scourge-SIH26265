@@ -2,6 +2,7 @@
 
 **Ask the bank, not the paper.** Smart India Hackathon 2026 · PS SIH26265 · Team **Arnavax#** (ID 199322)
 
+- **Live demo (no install): https://scourge-sih26265.onrender.com** · pick a role on the sign-in page; synthetic bank, real MPC-TLS proofs. Free hosting: first load after idle takes ~1 min, a proof ~10-30 s.
 - Demo video: https://youtu.be/8HoplhFOGCg
 - **For reviewers:** [`docs/SECURITY.md`](docs/SECURITY.md) (each control → code → test) · [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) (bank coverage, fallback, legal basis, cost, deployment and recovery)
 - **Full idea, solution and workflow (start here):** [`docs/IDEA.md`](docs/IDEA.md)
@@ -18,7 +19,7 @@ python3 -m pytest tests          # starts the portal, the verifier and the synth
 
 - **Platforms:** prebuilt proof binaries ship for **Linux x86-64** (`bin/`) and **macOS Apple Silicon** (`bin/darwin-arm64/`); the app picks the right set automatically. Any other platform: `./scripts/build_rust.sh` (Rust toolchain) builds its own set into `bin/<os>-<arch>/`.
 - **Docker:** `docker compose up -d` → http://localhost:8000 (works on Apple Silicon too).
-- **Hosted demo (no install):** see the link at the top of this README once published; built from this repo by `deploy/hf/` (Hugging Face Spaces, synthetic bank only).
+- **Hosted demo:** https://scourge-sih26265.onrender.com (Render free plan via `render.yaml`, built from this repo; one proof at a time).
 - **Windows:** install Docker Desktop, then double-click **`scourge.cmd`** (opens http://localhost:8000). Full test run: `scourge test` (demo + production suites, inside Linux). Stop: `scourge stop`. No Rust, Python or WSL needed.
 - **Any OS, tests only:** `docker compose --profile ops run --rm tests`.
 - **Click through:** `./scripts/run.sh` → http://127.0.0.1:8080 → *Start the demo*.

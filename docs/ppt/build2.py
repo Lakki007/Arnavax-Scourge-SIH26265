@@ -254,7 +254,7 @@ pointer(s3, L, 1.22, 8, "Technologies to be used")
 stack = [("FaFingerprint", VIO, "Proof layer", "TLSNotary MPC-TLS · Rust", "Selective disclosure · rustls"),
          ("FaServer", SKY, "Backend", "Python · FastAPI · SQLite", "AES-GCM vault · hash-chained audit"),
          ("FaCode", MINT, "Frontend", "Server-rendered HTML · JS", "Live 3-party proof view"),
-         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "276 tests · 2FA · audits")]
+         ("FaVial", AMBER, "Ops & QA", "Docker · nginx · GitHub CI", "298 tests · 2FA · audits")]
 cw4 = (CW - 3 * 0.2) / 4
 for i, (ic, col, head, l1, l2) in enumerate(stack):
     x = L + i * (cw4 + 0.2)
@@ -318,8 +318,8 @@ s4 = S[3]; frame(s4)
 title(s4, [("FEASIBILITY AND VIABILITY", INK)], 30)
 pointer(s4, L, 1.22, 8, "Analysis of the feasibility of the idea")
 tiles = [("FaBolt", VIO, "0.58 s", "per bank proof", "median of 60 runs · synthetic bank"),
-         ("FaGlobe", SKY, "Real bank", "live split-key session", "logged-in deposits API · 200 OK in 0.4 s"),
-         ("FaVial", MINT, "276 / 276", "automated tests pass", "incl. rollback, forgery, backup-restore"),
+         ("FaGlobe", SKY, "Real bank", "live split-key session", "logged-in deposits API · 200 OK"),
+         ("FaVial", MINT, "298 / 298", "automated tests pass", "incl. rollback, forgery, backup-restore"),
          ("FaCoins", AMBER, "₹0", "software licences", "60 MB/proof (measured) · FEASIBILITY.md")]
 for i, (ic, col, big, lab, note) in enumerate(tiles):
     x = L + i * (cw4 + 0.2)
@@ -353,7 +353,7 @@ for r_, s_ in risks:
     ry += 0.52
 g = rect(s4, L, 6.2, CW, 0.58, fill=INK, r=0.25)
 tx(s4, L + 0.3, 6.2, CW - 0.6, 0.58, [[("PILOT PLAN  ", {"f": H, "b": True, "s": 11, "c": AMBER}),
-   ("✓ Prototype, 276 tests  →  ✓ Live real-bank session  →  ", {"s": 10.5, "b": True, "c": MINT}),
+   ("✓ Prototype, 298 tests  →  ✓ Live real-bank session  →  ", {"s": 10.5, "b": True, "c": MINT}),
    ("FD pages at 3 large banks  →  1 AICTE regional office  →  National rollout", {"s": 10.5, "c": WHITE})]],
    anchor=MSO_ANCHOR.MIDDLE)
 
@@ -378,7 +378,7 @@ pill(s5, L, 3.42, lw_, 0.36, "TODAY", CORAL, size=10.5, font=H)
 pill(s5, L + lw_ + gap_, 3.42, lw_, 0.36, "WITH SCOURGE", MINT, size=10.5, font=H)
 pairs = [("Branch letter or uploaded screenshot", "The bank's own server, proven"),
          ("Checked once, trusted for 10 years", "Re-checked any time, before every release"),
-         ("Weeks per confirmation", "0.58 s per proof (synthetic); 0.4 s live bank session"),
+         ("Weeks per confirmation", "~1 s per proof (synthetic, local); ~10 s at 50 Mbit/s"),
          ("Hidden loans found at release, or never", "Pledge checked at the bank; two-officer release")]
 py = 3.88
 for a_, b2 in pairs:
@@ -442,7 +442,7 @@ q = rect(s6, L + 0.2, 5.55, 1.08, 1.08, fill=WHITE, r=0.08)
 qp6 = s6.shapes.add_picture(IMG + "qr_dark.png", Inches(L + 0.25), Inches(5.6), Inches(0.98), Inches(0.98)); qp6.click_action.hyperlink.address = DEMO_HREF
 tx(s6, L + 1.45, 5.5, 4.7, 1.2, [[("PROJECT RESOURCES", {"f": H, "b": True, "s": 11, "c": MINT, "after": 3})],
    [("Demo video: ", {"b": True, "s": 9.5, "c": WHITE}), (DEMO_URL, {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})],
-   [("Prototype: ", {"b": True, "s": 9.5, "c": WHITE}), ("Scourge v1.0.0-rc1 · 276 / 276 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
+   [("Live demo: ", {"b": True, "s": 9.5, "c": WHITE}), ("scourge-sih26265.onrender.com", {"s": 9.5, "c": RGBColor(0xC4, 0xB5, 0xFD)}), (" · 298 tests · synthetic bank", {"s": 9.5, "c": GREY_L})],
    [("Code + evidence: ", {"b": True, "s": 9.5, "c": WHITE}), ("github.com/Lakki007/Arnavax-Scourge-SIH26265", {"s": 9, "c": RGBColor(0xC4, 0xB5, 0xFD)})]], anchor=MSO_ANCHOR.MIDDLE)
 
 # comparison table (hero)
@@ -479,7 +479,7 @@ for i, (f_, vals) in enumerate(feat, 1):
             cell(tb_.cell(i, j), v, VIO_T if j == 5 else WHITE, MINT if v == "✓" else CORAL if v == "✕" else AMBER, 15)
     tb_.rows[i].height = Inches(0.62)
 tb_.rows[0].height = Inches(0.62)
-tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with a real bank's logged-in deposits API: 200 OK in 0.4 s (first bank tested: SBI).", {"s": 9.5, "i": True, "c": GREY})]])
+tx(s6, tx_, 6.38, R - tx_, 0.4, [[("~ a bank letter can still be forged.  Live split-key session with a real bank's logged-in deposits API: 200 OK (first bank tested: SBI); deposit fields not yet read.", {"s": 9.5, "i": True, "c": GREY})]])
 
 for sl in prs.slides:
     for sh in sl.shapes:

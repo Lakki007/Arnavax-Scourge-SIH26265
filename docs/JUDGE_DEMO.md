@@ -2,6 +2,8 @@
 
 Every synthetic element is labelled on screen. Say "synthetic bank, real proofs" once and keep to it.
 
+**Live hosted demo:** https://scourge-sih26265.onrender.com (free plan: open it a few minutes early, since the first load after idle takes about a minute; each proof takes 10–30 s there instead of ~1 s locally).
+
 **Backup.** `docs/demo/scourge_demo_replay.mp4` (2 min 14 s). It is a recording of this exact path on the live app, and the top of every frame reads "RECORDED REPLAY · SYNTHETIC BANK, REAL PROOFS". Play it only if the live demo fails, and say so.
 
 ## 1. 30-second pitch
