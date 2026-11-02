@@ -3,7 +3,7 @@
 **Ask the bank, not the paper.** Smart India Hackathon 2026 · PS SIH26265 · Team **Arnavax#** (ID 199322)
 
 - **Live demo (no install): https://scourge-sih26265.onrender.com** · pick a role on the sign-in page; synthetic bank, real MPC-TLS proofs. Free hosting: first load after idle takes ~1 min, a proof ~10-30 s.
-- Demo video: https://youtu.be/8HoplhFOGCg
+- Demo video: https://youtu.be/Gm4dzjRQvC4
 - **For reviewers:** [`docs/SECURITY.md`](docs/SECURITY.md) (each control → code → test) · [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) (bank coverage, fallback, legal basis, cost, deployment and recovery)
 - **Full idea, solution and workflow (start here):** [`docs/IDEA.md`](docs/IDEA.md)
 - Code: https://github.com/Lakki007/Arnavax-Scourge-SIH26265

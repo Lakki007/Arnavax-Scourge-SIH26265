@@ -2,7 +2,7 @@
 
 **Ask the bank, not the paper.** Smart India Hackathon 2026 · Problem statement **SIH26265**, *Streamline of Security Deposit / FDR Portal* (AICTE) · Team **Arnavax#** (ID 199322)
 
-Demo video: https://youtu.be/8HoplhFOGCg · Idea deck: [`docs/ppt/Scourge_SIH26265_Idea.pdf`](ppt/Scourge_SIH26265_Idea.pdf)
+Demo video: https://youtu.be/Gm4dzjRQvC4 · Idea deck: [`docs/ppt/Scourge_SIH26265_Idea.pdf`](ppt/Scourge_SIH26265_Idea.pdf)
 
 > **In one sentence:** an institution proves, from its own net-banking session, what the bank's server says about its security-deposit FDR; AICTE's verifier checks the proof and sees only that one deposit's record, so a forged, edited or out-of-date FDR cannot pass.
 

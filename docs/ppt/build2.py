@@ -12,8 +12,8 @@ T = "/tmp/claude-0/ppt/"
 IMG, ICO = T + "img/", T + "icons/"
 VIDEO = T + "video/scourge_demo_silent.mp4"
 POSTER = T + "video/poster.png"
-DEMO_URL = "youtu.be/8HoplhFOGCg"
-DEMO_HREF = "https://youtu.be/8HoplhFOGCg"
+DEMO_URL = "youtu.be/Gm4dzjRQvC4"
+DEMO_HREF = "https://youtu.be/Gm4dzjRQvC4"
 
 H, B = "Poppins", "Inter"
 INK = RGBColor(0x0F, 0x17, 0x2A)
