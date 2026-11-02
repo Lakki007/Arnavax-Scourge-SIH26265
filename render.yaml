@@ -1,12 +1,14 @@
-# One-click hosted demo on Render (free web service). Set SCOURGE_ACCESS_CODE in the dashboard.
+# Render Blueprint: hosted demo on the FREE plan (512 MB, 0.1 CPU). Synthetic bank only.
+# Measured under those limits: a proof takes ~20-30 s; one proof at a time (a second gets "try again").
 services:
   - type: web
-    name: scourge-demo
+    name: scourge-sih26265
     runtime: docker
     plan: free
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
-      - key: SCOURGE_ACCESS_CODE
-        sync: false
+      - key: SCOURGE_MAX_PROOFS
+        value: "1"
       - key: SCOURGE_COOKIE_SECURE
         value: "1"
