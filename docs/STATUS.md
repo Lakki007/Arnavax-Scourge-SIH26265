@@ -20,5 +20,5 @@ Labels: **Tested here** = an automated test in this repo exercises it (`scripts/
 | Reading FD field values at a real bank | **Not achieved** — SBI encrypts deposit data inside HTTPS | `tools/realbank/RESULTS.md` |
 | In-browser prover for app-encrypted banks | **Planned**; bridge built, its results capped at *Insufficient evidence* until the proof exists | `docs/EXTENSION_PROVER.md`, `tests/test_extension_bridge.py` |
 | Signed e-advice / branch confirmation fallback | Implemented, labelled weaker evidence | `docs/FEASIBILITY.md` |
-| Hosted demo | Planned | — |
+| Hosted demo | Live: https://scourge-sih26265.onrender.com (synthetic bank; proof verified from outside, 2 Nov: 12 s on the free plan) | `render.yaml` |
 | External penetration test, user trials, AICTE rule validation | Planned | — |
