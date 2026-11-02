@@ -3,7 +3,7 @@
 **Ask the bank, not the paper.** Smart India Hackathon 2026 · PS SIH26265 · Team **Arnavax#** (ID 199322)
 
 - **Live demo (no install): https://scourge-sih26265.onrender.com** · pick a role on the sign-in page; synthetic bank, real MPC-TLS proofs. Free hosting: first load after idle takes ~1 min, a proof ~10-30 s.
-- Demo video: https://youtu.be/8HoplhFOGCg
+- Demo video: https://youtu.be/Gm4dzjRQvC4
 - **For reviewers:** [`docs/SECURITY.md`](docs/SECURITY.md) (each control → code → test) · [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) (bank coverage, fallback, legal basis, cost, deployment and recovery)
 - **Full idea, solution and workflow (start here):** [`docs/IDEA.md`](docs/IDEA.md)
 - Code: https://github.com/Lakki007/Arnavax-Scourge-SIH26265
@@ -116,7 +116,7 @@ If a portal is already running on 127.0.0.1:8080, the tests use it instead of st
 | Backup and recovery | Online backup, checksummed archive, verified restore (`scripts/backup.py`) |
 | Live real-bank MPC-TLS session | **Real**: logged-in deposits API, 200 OK in 0.4 s, 61 MB (first bank tested: SBI) |
 | App-encrypted banks (e.g. SBI) | In-browser prover: design in `docs/EXTENSION_PROVER.md`; verifier→portal bridge built and tested (`tests/test_extension_bridge.py`) |
-| Speed and cost per proof | 0.4 s and 61 MB on the real bank; 60 MB at a 4 KB request budget against public roots (`tools/realbank/BUDGETS.md`) |
+| Speed and cost per proof | 61 MB on the real bank (prover and verifier in one process, so its 0.4 s is not deployment latency; see `docs/OPERATIONS.md` for ~10 s at 50 Mbit/s); 60 MB at a 4 KB request budget against public roots (`tools/realbank/BUDGETS.md`) |
 
 ## Audit changes (29 Oct)
 
